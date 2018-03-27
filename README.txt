@@ -1,33 +1,30 @@
-Plugin Builder Results
+# GeoFibra
+## Introducción
+GeoFibra es un plugin para  QGIS, diseñado para el trabajo en despliegues de redes de FTTH. Hasta ahora, este tipo de diseños se venían haciendo con herramientas CAD y un tedioso y largo trabajo manual. Con GeoFibra la metodología cambia, ya que se aprovecha la capacidad analítica de los GIS, así como su presentación en forma de planos. 
 
-Your plugin GeoFibra was created in:
-    /home/luismi/.qgis2/python/plugins/GeoFibra
+Este plugin se ha creado usando el lenguaje de programación Python, realizando tareas de análisis sobre PostGIS. La combinación de estas tres tecnologías nos ayudan desde leer e interpretar los datos de Catastro, hasta asignar fusiones de fibras, pasando por la creación de CTO's, entre otras funciones.
 
-Your QGIS plugin directory is located at:
-    /home/luismi/.qgis2/python/plugins
+## La última versión
+Para la última versión contactar con:
+  admin@geofibra.com
+o visitar la web:
+  https://geofibra.com
+## Documentación
+La Documentación puede consultarse en:
+  http://docs.geofibra.com
+## Instalación
+Este Plugin puede instalarse situando la carpeta en la siguiente ruta:
+~/.qgis2/python/plugins
 
-What's Next:
+Dependencias 
+    Psycopg2
+    Postgresql 9.5
+    PostGIS 2.3.3
+    
+## Licencia
+GNU/GPL3
+## Contacto
+Luis Miguel Royo Pérez
++34 679846103
+admin@geofibra.com
 
-  * Copy the entire directory containing your new plugin to the QGIS plugin
-    directory
-
-  * Compile the resources file using pyrcc4
-
-  * Run the tests (``make test``)
-
-  * Test the plugin by enabling it in the QGIS plugin manager
-
-  * Customize it by editing the implementation file: ``geofibra.py``
-
-  * Create your own custom icon, replacing the default icon.png
-
-  * Modify your user interface by opening GeoFibra.ui in Qt Designer
-
-  * You can use the Makefile to compile your Ui and resource files when
-    you make changes. This requires GNU make (gmake)
-
-For more information, see the PyQGIS Developer Cookbook at:
-http://www.qgis.org/pyqgis-cookbook/index.html
-
-(C) 2011-2014 GeoApt LLC - geoapt.com
-Git revision : $Format:%H$
