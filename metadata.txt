@@ -1,0 +1,39 @@
+# This file contains metadata for your plugin. Since 
+# version 2.0 of QGIS this is the proper way to supply 
+# information about a plugin. The old method of 
+# embedding metadata in __init__.py will 
+# is no longer supported since version 2.0.
+
+# This file should be included when you package your plugin.# Mandatory items:
+
+[general]
+name=GeoFibra
+qgisMinimumVersion=2.18
+description=Asistente de Diseño de Redes FTTH.
+version=1.0
+author=Luis Miguel Royo Perez
+email=admin@inisig.com; luis.miguel.royo@gmail.com
+
+about=El proposito de este plugin es el de asistir al diseñador de redes FTTH en el proceso de toma de decisiones de diseño de la red. El objetivo del plugin en primer momento es el de modelizar el área de estudio tanto a nivel físico (Parcelas, calles...), como a nivel social (UUII). Una vez tenemos esta parte del proyecto creada, podríamos diseñar la red de acuerdo con la realidad existente. Podemos realizar, creaciones de CTO's, de splitters de la RA, nombrados de cables, conteo de fibras, reservas y asignado de fusiones, entre otras funciones.
+
+tracker=https://github.com/luismi2/GeoFibra-QGIS-plugin/issues
+repository=https://github.com/luismi2/GeoFibra-QGIS-plugin
+# End of mandatory metadata
+
+# Recommended items:
+
+# Uncomment the following line and add your changelog:
+# changelog=
+
+# Tags are comma separated with spaces allowed
+tags=ftth
+
+homepage=https://geofibra.com
+category=Plugins
+icon=icon.png
+# experimental flag
+experimental=False
+
+# deprecated flag (applies to the whole plugin, not just a single version)
+deprecated=False
+
