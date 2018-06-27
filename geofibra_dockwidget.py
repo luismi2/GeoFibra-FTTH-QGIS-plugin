@@ -42,14 +42,17 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
     sennalSp1n = pyqtSignal(str, str,str)
     sennalCTO = pyqtSignal(int, int, int, int, int, str, str, str, str)
     sennalCTOCerrado = pyqtSignal(int, str, str, str, str)
-    sennalCableDist = pyqtSignal(bool, bool, bool, bool,bool, bool, int, str, str)
+    sennalCableDist = pyqtSignal( bool, bool, bool,bool, bool, int, str, str)
     sennalError = pyqtSignal(str)
     sennalError2 = pyqtSignal(str)
     sennalRevLin = pyqtSignal(str)
-    sennalCableTroncal = pyqtSignal(bool, bool, bool, bool,bool, bool, int, str, str)
+    sennalCableTroncal = pyqtSignal( bool, bool, bool,bool, bool, int, str, str)
     sennalModeloCable = pyqtSignal(str,str,str,str,str,str)
     sennalDistancias= pyqtSignal(bool,bool,str)
-    
+    sennalExporta= pyqtSignal(str)
+    sennalImporta= pyqtSignal(str)    
+    sennalCto_plus = pyqtSignal(int, int,str,str,str,str)
+    sennalCto_rem= pyqtSignal(str)
     def __init__(self, parent=None):
         """Constructor."""
         super(GeoFibraDockWidget, self).__init__(parent)
@@ -75,6 +78,11 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         self.pushButton_tr.pressed.connect(self.rt)
         self.pushButton_annadeModelo.pressed.connect(self.addModel)
         self.pushButtonDistancias.pressed.connect(self.calculaDistancias)
+        self.exportar.pressed.connect(self.exporta_dpkg)
+        self.importar.pressed.connect(self.importa_dpkg)        
+        self.add_ont.pressed.connect(self.ctoP)
+        self.remove_ont.pressed.connect(self.cto_remove)
+
 
     def closeEvent(self, event):
         self.closingPlugin.emit()
@@ -156,7 +164,7 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         self.sennalCTOCerrado.emit(tasaPen, ratioSp, spCTO, acron_pob, conexion)
 
     def rd(self):
-        checkCE = self.checkBox_sinCE.checkState()
+        
         checkSD = self.checkBox_sinDer.checkState()        
         checkCartaEmp = self.checkBox_cartaEm.checkState()
         checkEtiq = self.checkBox_etiq.checkState()
@@ -166,7 +174,7 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         conexion = self.comboBox.currentText()
         acron_pob = self.lineEdit.text()
         porceRes = self.spinBoxFibRes.value()
-        self.sennalCableDist.emit(checkNombrado, checkConteo, checkCE,checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion)
+        self.sennalCableDist.emit(checkNombrado, checkConteo, checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion)
 
     def errorMas(self):
         valorEtiqueta = self.label_idError.text()
@@ -181,7 +189,7 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         self.sennalRevLin.emit(conexion)
 
     def rt(self):
-        checkCE = self.checkBox_sinCE_tr.checkState()
+        
         checkSD = self.checkBox_sinDer_tr.checkState()        
         checkCartaEmp = self.checkBox_cartaEm_tr.checkState()
         checkEtiq = self.checkBox_etiq_tr.checkState()
@@ -192,7 +200,7 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         acron_pob = self.lineEdit.text()
         porceRes = self.spinBoxFibRes_tr.value()
         
-        self.sennalCableTroncal.emit(checkNombrado, checkConteo, checkCE,checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion)
+        self.sennalCableTroncal.emit(checkNombrado, checkConteo, checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion)
 
     def addModel(self):
         marca = self.lineEdit_marca.text()
@@ -208,3 +216,24 @@ class GeoFibraDockWidget(QtGui.QDockWidget, FORM_CLASS):
         checkDs = self.checkBox_distribucion.checkState()        
         conexion = self.comboBox.currentText()
         self.sennalDistancias.emit(checkTr, checkDs, conexion)
+
+    def exporta_dpkg(self):               
+        conexion = self.comboBox.currentText()
+        self.sennalExporta.emit(conexion)
+
+    def importa_dpkg(self):               
+        conexion = self.comboBox.currentText()
+        self.sennalImporta.emit(conexion)
+
+    def ctoP(self):
+        conexion = self.comboBox.currentText()               
+        ratioSp = self.spinBox_Ratio_Spliteo.value()
+        spCTO = self.spinBox_splitters_cto.value()
+        caja_ext = self.lineEdit_caja_ext.text()
+        caja_int = self.lineEdit_caja_int.text()
+        acron_pob = self.lineEdit.text()
+        self.sennalCto_plus.emit(ratioSp,spCTO,caja_ext,caja_int,conexion,acron_pob)
+
+    def cto_remove(self):
+        conexion = self.comboBox.currentText()
+        self.sennalCto_rem.emit(conexion)
