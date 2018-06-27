@@ -40,11 +40,19 @@ from PyQt4.QtSql import *
 from qgis.utils import *
 from PyQt4.QtGui import *
 from qgis.gui import *
+from PyQt4 import QtGui
+from qgis.gui import QgsMapToolEmitPoint
+
 import io
 import platform
 import ntpath
 import os
 import processing
+from osgeo import ogr
+import db_manager.db_plugins.postgis.connector as con
+from qgis.core import QgsDataSourceURI
+from qgis import utils
+import time
 
 #Variables Globales
 home = expanduser("~")
@@ -198,18 +206,24 @@ def relaciones(nombreCapaTOC1_noSP, nombreCapaTOC2_SP, campoCapaTOC1, campoCapaT
     QgsProject.instance().relationManager().addRelation( rel )
 
 #Funcion que crea los splitters de la RD
-def creSplittersDist(campoNombre,campoSplitters, campoRatioSpliteo):
+def creSplittersDist( campoNombre,campoSplitters, campoRatioSpliteo, sql2):
+    qsql=sql2   
+    
+    
     uri = QgsDataSourceURI()
     uri.setConnection(host, "5432",nombreBBDD, usuario, password)    
-    uri.setDataSource ("public", 'cto', "geom")   
+    uri.setDataSource ("", qsql, "geom","","id")   
     layer=QgsVectorLayer (uri .uri() ,'Splitters',"postgres")
     for feature in layer.getFeatures():
+    	
         idx = layer.fieldNameIndex(campoNombre)
         idSp = layer.fieldNameIndex(campoSplitters)
         idRatSp = layer.fieldNameIndex(campoRatioSpliteo)
+        
         for counter1 in range (1,int(feature.attributes()[idSp]+1.0)):
             for counter in range (1,int(feature.attributes()[idRatSp]+1.0)):
-                sql= """insert into splitters(nombre_cto, n_splitter,pat_splitter) values ('%s','%s','%s');"""% (feature.attributes()[idx],str(counter1),str(counter))
+                sql= """insert into splitters(nombre_cto, n_splitter,pat_splitter) values ('%s','%s','%s');"""% (feature.attributes()[idx],str(counter1),str(counter))           
+                
                 ejecutaSQL(nombreBBDD,host, usuario,password,sql)
 
 #Funcion que nombra los cables primarios
@@ -249,10 +263,54 @@ def nombresSecundarios(nombre_base_de_datos, host,  usuario,password, layerQgisV
         if feature["rank"] == qgis.core.NULL:
             nulo=nulo+1
     rank=1
+    rankAsignado = rank+1
+    
     while nulo!=0:
-        sqlUp="UPDATE "+cableado+" SET rank=a.rank , nombre=a.nombre FROM (select distinct a.id , "+str(rank+1)+" as rank, (b.nombre||'-0'||ROW_NUMBER () OVER (partition by b.nombre order by a.id )) nombre   from "+cableado+" a, (select * from "+cableado+" where "+cableado+".rank="+str(rank)+") b where st_dwithin(a.geom, st_endpoint(b.geom),2) and a.id!= b.id ) a WHERE a.id="+cableado+".id;"
+        sqlUp= """  update 
+                        """+cableado+""" d
+                    SET
+                            rank=a.rank,
+                            nombre=a.nombre
+                        FROM (
+                        with 
+                        pts_scnd as (
+                            select
+                                cbl.id,
+                                st_startpoint(cbl.geom) geom 
+                            from 
+                                """+cableado+""" cbl
+                            where 
+                                cbl.rank is null  
+                                
+                                ),
+                        rank as (
+                            select 
+                                id, 
+                                geom, 
+                                nombre, 
+                                rank 
+                            from 
+                                """+cableado+""" 
+                            where 
+                                rank="""+str(rank)+"""
+                                )
+                                
+                    select
+                        pts_scnd.id,    
+                        pts_scnd.geom,
+                        """+str(rank+1)+ """ as rank, 
+                        rank.nombre ||'-'|| row_number() over(partition by rank.nombre order by ST_LineLocatePoint(rank.geom, pts_scnd.geom) ) nombre
+                    from 
+                        pts_scnd, 
+                        rank 
+                    where 
+                        st_dwithin(rank.geom,pts_scnd.geom, 0.01) 
+                    ) a
+                where 
+                    d.id=a.id  """
         ejecutaSQL(nombre_base_de_datos, host,  usuario,password,sqlUp)
         rank=rank+1
+        rankAsignado= rank
         nulo=0
         for feature in layerQgisVector.getFeatures():
             if feature["rank"] == qgis.core.NULL:
@@ -288,16 +346,17 @@ def cajas_empalme(nomCapaCe, nombreTablaCables, acron_pob):
 def conteoCables(nombre_base_de_datos,host,usuario,password, cableado, nombreCableadoTOC, cifraIter, cajas, porc_res):
     layer = QgsMapLayerRegistry.instance().mapLayersByName( nombreCableadoTOC )[0]
     # #Averiguar iteraciones
-    listaLongitudes= []#Lista para introducir los valores de longitudes de campo
-    sqlComp="""create table fcl_"""+cableado+"""_acumulado as """#sql a completar para las fibras claras
-    expression = QgsExpression("length(nombre)")#Expresion para calcular las longitudes de campo
-    expression.prepare(layer.pendingFields())
+    listaRanks= []#Lista para introducir los valores de longitudes de campo
+    #sqlComp="""create table fcl_"""+cableado+"""_acumulado as """#sql a completar para las fibras claras
+    #expression = QgsExpression("length(nombre)")#Expresion para calcular las longitudes de campo
+    #expression.prepare(layer.pendingFields())
     for feature in layer.getFeatures():#Bucle para tomar las longitudes y ponerlas en la lista
-        value = expression.evaluate(feature)
-        listaLongitudes.append(int(value))
-    maxVal= max(listaLongitudes)#maximo valor de la lista
-    iterac=(int(maxVal)-cifraIter)/3#Veces que hay que iterar para el calculo de fibras claras || cifraIter es 9 para troncales, 13 para distribucion
-
+        #value = expression.evaluate(feature)
+        value=feature['rank']
+        listaRanks.append(int(value))
+    maxVal= max(listaRanks)#maximo valor de la lista
+    #iterac=(int(maxVal)-cifraIter)/3#Veces que hay que iterar para el calculo de fibras claras || cifraIter es 9 para troncales, 13 para distribucion
+    iterac = maxVal
     ##Resetear campos
     listaColumnas=['fib_cl', 'fib_res', 'fib_total', 'marca','modelo','fib_totales_cable', 'tubos','fib_tubos' ]
     for column in listaColumnas:
@@ -306,65 +365,78 @@ def conteoCables(nombre_base_de_datos,host,usuario,password, cableado, nombreCab
                     SET
                         """+column+"""=NULL;"""
         ejecutaSQL(nombre_base_de_datos, host,  usuario,password,sqlNull)
+    sqlUpdate = """
+                update 
+                    """+cableado+""" 
+                set 
+                    fib_cl=a.foc
+                from (
+                    with 
+                        dist as (select 
+                                    id,
+                                    nombre,
+                                    rank,
+                                    geom
+                                from 
+                                    """+cableado+"""),
+                        cto as (select 
+                                    id,
+                                    nombre,
+                                    splitters,
+                                    geom
+                                from 
+                                    """+cajas+"""),
 
-    for i in range (0,iterac+1):#iteracion y composicion de la sentencia sql de las fibras claras
-        sql= """
-        select distinct
-            sum(ft.fib_cl)::numeric fib_cl,
-            substring(ft.nombre,1,"""+str(i*3+cifraIter)+""") nombre_cable
-        from
-            fcl_"""+cableado+""" ft
-        where
-            rank>="""+str(i+1)+"""
-        group by
-            substring(ft.nombre,1,"""+str(i*3+cifraIter)+""")
-        union """    ### CifraNombre: 9 para Troncal; 13 para distribucion
-        sqlComp = sqlComp+sql
+                        conteo_simple as(select 
+                                    d.id,
+                                    d.nombre,
+                                    d.rank,
+                                    sum(c.splitters)::integer foc           
+                                from 
+                                    cto c,
+                                    dist d
+                                where 
+                                    st_dwithin(d.geom,c.geom, 0.01) and not 
+                                    st_dwithin(st_startpoint(d.geom),c.geom, 0.01)
+                                group by 
+                                    d.nombre,
+                                    d.id,
+                                    d.rank
+                                order by 
+                                    d.nombre)
 
-    sqlFclInd=""" create table fcl_"""+cableado+""" as
-                    select
-                        nombre,
-                        sum(fcl_cab.splitters)::numeric fib_cl,
-                        rank
-                    from
-                        (select distinct
-                            d.nombre,
-                            c.geom,
-                            c.nombre peana,
-                            c.splitters,
-                            d.rank
+                    SELECT
+                         
+                        substr(nombre, 1, %s) nombre,
+                        sum(foc) foc
+                        
+                    from 
+                        conteo_simple
+                    where 
+                        %s
+                    group by 
+                        
+                        substr(nombre, 1, %s)
+                    order by 
+                        nombre) a
+            where
+                """+cableado+""".nombre= a.nombre """
+    whereCl= 'rank ='
+    for i in range(0, iterac):
+        longitud=((iterac-i)-1)*2+cifraIter
+        rank = iterac-i
+        if rank == maxVal:
+            whereCl= whereCl+str(rank)
+        elif rank < maxVal:
+            whereCl= whereCl+' or rank='+str(rank)
+        
+        sqlDef= sqlUpdate % (longitud,whereCl,longitud)+';'
+        ejecutaSQL(nombre_base_de_datos,host, usuario,password,sqlDef)
 
-                        from
-                            """+cajas+""" c,
-                            """+cableado+""" d
-                        where
-                            st_dwithin(d.geom,c.geom, 0.01) and not
-                            st_equals(ST_snap(c.geom, d.geom, 0.1), st_startpoint(d.geom))
-                        ) fcl_cab
-                    group by
-                        fcl_cab.nombre,
-                        fcl_cab.rank
-                    order by
-                        fcl_cab.nombre;"""
-    if sqlComp[-6:]=='union ': #Quitamos el union final de la sql
-        sqlComp = sqlComp[:-6]
-    sqlComp = sqlComp+';'    #annadimos un ;
-    sqlDrop1="""drop table if exists fcl_"""+cableado+""";"""
-    sqlDrop2='drop table if exists fcl_'+cableado+'_acumulado;'
-
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlDrop1)
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlFclInd)
-
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlDrop2)
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlComp)
-
-    sqlUp1='update '+ cableado+' set fib_cl =a.fb_cl FROM (select '+ cableado+'.nombre,fcl_'+cableado+'_acumulado.fib_cl fb_cl FROM public.fcl_'+cableado+'_acumulado, public.'+ cableado+' WHERE fcl_'+cableado+'_acumulado.nombre_cable='+ cableado+'.nombre) a where '+ cableado+'.nombre=a.nombre ;'
-    sqlUp2 ='update '+ cableado+' set fib_res = ceil((fib_cl*'+str(porc_res)+')::numeric/100);'
-    sqlUp3 = 'update '+ cableado+' set fib_total = fib_cl+fib_res;'
-
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlUp1)
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlUp2)
-    ejecutaSQL(nombre_base_de_datos,host,usuario,password,sqlUp3)
+    sqlResv= """ UPDATE """+cableado+""" SET fib_res=a.res FROM (select id, ceil(fib_cl::numeric*30/100) res from """+cableado+""") a where a.id="""+cableado+""".id;"""
+    sqlTotal= """ UPDATE """+cableado+""" SET fib_total=a.tot FROM (select id, fib_cl+fib_res tot from """+cableado+""") a where a.id="""+cableado+""".id;"""
+    ejecutaSQL(nombre_base_de_datos,host, usuario,password,sqlResv)
+    ejecutaSQL(nombre_base_de_datos,host, usuario,password,sqlTotal)
 
     ###Asignado Modelos Cables
 
@@ -389,9 +461,11 @@ def conteoCables(nombre_base_de_datos,host,usuario,password, cableado, nombreCab
     ejecutaSQL(nombre_base_de_datos,host, usuario,password,sqlUpd)#Ejecucion final de la consulta SQL
 
 #Funcion para la creacion de las Cartas de Empalme
-def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, nombreTablaAux, cajasSplitters, campoDerivador, AbreviaturaRed):
+def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, nombreTablaAux, cajasSplitters, campoDerivador, AbreviaturaRed, longitudCampo):
     layer = QgsMapLayerRegistry.instance().mapLayersByName( nombreCapaTOC )[0]
+    sqlIndexDrop = """ DROP INDEX IF EXISTS  fibra_unica;"""
     sqlFib = ' DROP TABLE IF EXISTS carta_empalmes_'+cableado+'; CREATE TABLE carta_empalmes_'+cableado+' (id serial, nombre varchar(40) NOT NULL, tubo_numero integer NOT NULL, fibra integer NOT NULL, destino varchar(255),id_fibra integer, PRIMARY KEY(id));'#SQL de creacion de tabla vacia de fibras_cables
+    ejecutaSQL(nombreBBDD, host,usuario,password,sqlIndexDrop)
     ejecutaSQL(nombreBBDD, host,usuario,password,sqlFib)#Ejecutamos la creacion
     idx = layer.fieldNameIndex('nombre')#Indice campo Nombre
     idTb = layer.fieldNameIndex('tubos')#Indice campo Tubos
@@ -400,6 +474,7 @@ def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, n
         for counter1 in range (1,int(feature.attributes()[idTb]+1.0)):
             for counter in range (1,int(feature.attributes()[idFtb]+1.0)):
                 sqlConst = "INSERT INTO carta_empalmes_"+cableado+" (nombre, tubo_numero, fibra, destino) VALUES ('%s', '%s', '%s','LIBRE'); "  % (str(feature.attributes()[idx]),str(counter1),str(counter) )#SQL que nos inserta los registros en la tabla previamente creada
+                
                 ejecutaSQL(nombreBBDD, host, usuario,password,sqlConst)#Ejecutamos el SQL creado.
     sqlIdfibra="""UPDATE carta_empalmes_"""+cableado+"""
     SET id_fibra=a.id_fibra
@@ -459,143 +534,127 @@ def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, n
     sqlUnique = """ CREATE UNIQUE INDEX fibra_unica ON carta_empalmes_"""+cableado+""" (destino) WHERE (destino !='LIBRE' and destino !='RESERVA'); """#Constraint que impedira que las fibras puedan asignarse dos veces.
     ejecutaSQL(nombreBBDD, host,  usuario,password,sqlUnique)#Ejecutamos la creacion
     rankLista=[]
-    qsql="(select row_number() over() as id, * from (select distinct a.geom, a.rank from cajas_empalme_"+cableado+" a union select distinct  b.geom,c.rank from "+cajasSplitters+" b, "+cableado+" c where b."+campoDerivador+"='S' and st_dwithin(st_endpoint(c.geom),b.geom, 0.1)) cc)"
+    
     uri = QgsDataSourceURI()
     uri.setConnection(host, '5432', nombreBBDD, usuario, password)
-    uri.setDataSource("",qsql, "geom","","id")
-    derivadoreslayer = QgsVectorLayer(uri.uri(), "carga_derivadores", "postgres")
+    uri.setDataSource("public", "distribucion", "geom", "")
+    derivadoreslayer = QgsVectorLayer(uri.uri(), "distribucion", "postgres")
 
     for feature in derivadoreslayer.getFeatures():
         rankLista.append(feature["rank"])
+        
     listaRankUnique= set(rankLista)
 
     rankInverse=sorted(listaRankUnique, reverse=True)
-    for i in rankInverse:
+    del rankInverse[-1]
+    
+    for i in rankInverse:        
+        longitud=str((i-1)*2+longitudCampo-2)
+        
+        sqlEnlacesSecundarios = """ 
+                                UPDATE carta_empalmes_"""+cableado+"""
+                                         SET destino=a.destino
+                                         FROM (
+                                    with 
+                                        puntos_derivadores as (
+                                            select id, geom from """+cajasSplitters+""" where """+campoDerivador+"""='S'
+                                            union all
+                                            select id, geom from  cajas_empalme_"""+cableado+"""
+                                        ),
+                                        cables_principales as (
+                                        
+                                            select distinct
+                                                ds.id,
+                                                ds.nombre,
+                                                ds.rank,
+                                                
+                                                ds.geom 
+                                            from 
+                                                """+cableado+""" ds,
+                                                puntos_derivadores pd
+                                            where 
+                                                st_dwithin(ds.geom,pd.geom,0.001) and 
+                                                rank = """+str(i-1)+"""
+                                            order by 
+                                                nombre
+                                        ),
+                                        cables_secundarios as ( 
+                                            select 
+                                                ds.id,
+                                                ds.nombre,
+                                                ds.rank,
+                                                pd.id pdid,
+                                                ds.geom 
+                                            from 
+                                                """+cableado+""" ds,
+                                                puntos_derivadores pd
+                                            where 
+                                                st_dwithin(ST_startpoint(ds.geom),pd.geom,0.1) and 
+                                                rank = """+str(i)+"""
+                                            order by
+                                                nombre,
+                                                ST_LineLocatePoint(ds.geom,pd.geom)
+                                        ),
+                                        fibras_principales as(
+                                            select distinct 
+                                                ce.id,
+                                                ce.nombre,
+                                                ce.tubo_numero,
+                                                ce.fibra,
+                                                ROW_NUMBER () OVER (PARTITION BY ce.nombre order by ce.nombre, ce.id_fibra  ) id_fibra,
+                                                ce.id_fibra id_fibra_original
+                                            from 
+                                                carta_empalmes_"""+cableado+""" ce,
+                                                cables_principales cp
+                                            where 
+                                                cp.nombre=ce.nombre and 
+                                                ce.destino = 'LIBRE'
+                                            order by 
+                                                nombre, 
+                                                fibra, 
+                                                tubo_numero         
+                                        ),
+                                        
+                                        fibras_secundarias as(
+                                            select distinct 
+                                                ce.id,
+                                                ce.nombre,
+                                                ce.tubo_numero,
+                                                ce.fibra,
+                                                ce.destino,
+                                                ROW_NUMBER () OVER (PARTITION BY cp.nombre order by ce.nombre, ce.id_fibra  ) id_fibra_2,           
+                                                cp.nombre nombre_ppal
+                                            from 
+                                                carta_empalmes_"""+cableado+""" ce,
+                                                cables_secundarios cs,
+                                                cables_principales cp
+                                            where 
+                                                cs.nombre=ce.nombre and 
+                                                ce.destino!='LIBRE' and 
+                                                substring(ce.nombre from 1 for """+longitud+""") = cp.nombre
+                                            order by 
+                                                ce.nombre, 
+                                                tubo_numero,
+                                                fibra)
 
-        sqlEnlacesSecundarios= """UPDATE carta_empalmes_"""+cableado+"""
-        SET destino=a.destino
-        FROM (
-        select
-        fibras_raices.id_fibra,
-        fibras_raices.nombre,
-        fibras_raices.tubo_numero,
-        fibras_raices.fibra,
-        concat(fibras_filiales.nombre,', T',fibras_filiales.tubo_numero::text,', F',fibras_filiales.fibra::text) destino
-            from
-                (select
-            fr.*,
-            ROW_NUMBER () OVER (PARTITION BY fr.nombre )id_fibra_2
-        from (
-            select
-                carem.nombre,
-                carem.id_fibra,
-                carem.tubo_numero,
-                carem.fibra,
-                carem.destino,
-                raices.idce
-            from
-                carta_empalmes_"""+cableado+""" carem,
-                (select
-                    d.nombre,
-                    d.rank ,
-                    ce.id idce,
-                    ce.rank rankce
-                from
-                    """+cableado+""" d,
-                    (select
-                        ce1.id::integer,
-                        ce1.rank,
-                        ce1.geom
-                    from
-                        cajas_empalme_"""+cableado+""" ce1
-                    union
-                    select distinct
-                        ct1.id::integer,
-                        d.rank,
-                        ct1.geom
-                    from
-                        """+cajasSplitters+""" ct1,
-                        """+cableado+""" d
-                    where
-                        ct1."""+campoDerivador+"""='S' and
-                        st_equals(st_snap(ct1.geom,st_endpoint(d.geom), 0.01), st_endpoint(d.geom))
-                    ) ce
-                where
-                    st_dwithin(st_endpoint(d.geom),ce.geom, 0.005)
-                and
-                    ce.rank ="""+str(i)+"""
-                order by d.nombre
-                    )raices
-            where
-                raices.nombre=carem.nombre and
-                destino='LIBRE'
-            order by
-                nombre,
-                id_fibra
-            ) fr
-        ) fibras_raices,
-        (select
-            fl.*,
-            ROW_NUMBER () OVER (PARTITION BY fl.idce order by nombre, id_fibra  ) id_fibra_2
-        from (
-            select
-                cartem.nombre,
-                cartem.id_fibra,
-                cartem.tubo_numero,
-                cartem.fibra,
-                cartem.destino,
-                filiales.idce
-            from
-                carta_empalmes_"""+cableado+""" cartem,
-                (
-                select
-                    d.nombre,
-                    d.rank ,
-                    ce.id idce,
-                    ce.rank rankce
-                from
-                    """+cableado+""" d,
-                    (select
-                        ce1.id::integer,
-                        ce1.rank,
-                        ce1.geom
-                    from
-                        cajas_empalme_"""+cableado+""" ce1
-                    union
-                    select distinct
-                        ct1.id::integer,
-                        d1.rank,
-                        ct1.geom
-                    from
-                        """+cajasSplitters+""" ct1,
-                        """+cableado+""" d1
-                    where
-                        ct1."""+campoDerivador+"""='S' and
-                        st_equals(st_snap(ct1.geom,st_endpoint(d1.geom), 0.01), st_endpoint(d1.geom))
-                    ) ce
-                where
-                    st_dwithin(st_startpoint(d.geom),ce.geom,0.005)
-                and
-                    ce.rank ="""+str(i)+"""
-                ) filiales
-            where
-                filiales.nombre=cartem.nombre
-            and
-                cartem.destino!='LIBRE'
-            ) fl
-        )fibras_filiales
+                                        select 
+                                            fp.nombre nombre,
+                                            fp.tubo_numero tubo_ppal,
+                                            fp.id_fibra_original id_fibra,
+                                            fp.fibra fibra,
+                                            concat(fs.nombre,', T',fs.tubo_numero, ', F',fs.fibra) destino
+                                        from 
+                                            fibras_principales fp, 
+                                            fibras_secundarias fs
+                                        where 
+                                            fp.id_fibra = fs.id_fibra_2 and 
+                                            fp.nombre=fs.nombre_ppal
+                                        order by 
+                                            nombre,tubo_ppal,fibra  ) a
 
-    where
-        fibras_raices.id_fibra_2=fibras_filiales.id_fibra_2 and
-        fibras_raices.idce=fibras_filiales.idce
-    order by
-        nombre,
-        id_fibra
-            ) a
-
-       where
-           carta_empalmes_"""+cableado+""".id_fibra=a.id_fibra and carta_empalmes_"""+cableado+""".nombre=a.nombre;"""
-
+        where
+            carta_empalmes_"""+cableado+""".id_fibra=a.id_fibra and carta_empalmes_"""+cableado+""".nombre=a.nombre; """ 
+        
         ejecutaSQL(nombreBBDD, host,  usuario,password,sqlEnlacesSecundarios)
     sqlReservas = """ UPDATE carta_empalmes_"""+cableado+"""
                         SET destino=a.destino
@@ -632,7 +691,9 @@ def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, n
                         carta_empalmes_"""+cableado+""".id_fibra=a.id_fibra and
                         carta_empalmes_"""+cableado+""".nombre=a.nombre """
     ejecutaSQL(nombreBBDD, host, usuario,password,sqlReservas)
-    sqlOrd = """create table carta_empalmes_"""+cableado+"""2 as select * from carta_empalmes_"""+cableado+""" order by nombre, id_fibra asc;
+
+    sqlOrd = """DROP TABLE IF EXISTS carta_empalmes_"""+cableado+"""2; 
+                create table carta_empalmes_"""+cableado+"""2 as select * from carta_empalmes_"""+cableado+""" order by nombre, id_fibra asc;
                 ALTER TABLE carta_empalmes_"""+cableado+""" RENAME TO "table_old";
                 ALTER TABLE carta_empalmes_"""+cableado+"""2 RENAME TO carta_empalmes_"""+cableado+""";
                 DROP TABLE "table_old";"""
@@ -697,7 +758,8 @@ from (
                 ced.destino like '"""+letra+"""-%' and
                 st_dwithin(ce.geom, st_startpoint(dist.geom), 1) and
                 split_part(ced.destino::text, ',',1)= dist.nombre
-
+            order by 
+                origen asc
 
 
         ) cc
@@ -707,7 +769,7 @@ from (
     """
 
     sqlID= """alter table etiquetado_fibras_"""+nombreTablaCables+""" add column id bigserial; ALTER TABLE etiquetado_fibras_"""+nombreTablaCables+""" ADD PRIMARY KEY (id); """
-
+    
     ejecutaSQL(nombreBBDD, host, usuario,password,sqlEtiquetado)
     ejecutaSQL(nombreBBDD, host, usuario,password,sqlID)
     qmlEtiquetado = home+"""/.qgis2/python/plugins/GeoFibra/estilos/etiquetado_distribucion.qml"""
@@ -733,158 +795,186 @@ def seleccionZoomError(self, expresion, vlayer ):
     iface.mapCanvas().refresh()
 
 #Algoritmo para el hallazgo de errores en las redes de cableado.
-def errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC, checkCE, checkDer, campoDerivador):
+def errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC,  checkDer, campoDerivador):
     sqlDrop = """Drop table if exists errores_"""+abrevRed+"""; """
-    sqlErrores=""" create table errores_"""+abrevRed+""" as select distinct row_number() over() id, the_union.* from (
-        select distinct
-            st_endpoint(d.geom) geom,
-            'Caja derivadora sin indicar' as tipo
-        from
-            """+cajasSplitters+""" c,
-            """+cableado+""" d,
-            """+cableado+""" e
-        where
-            st_dwithin(st_endpoint(d.geom), st_startpoint(e.geom),0.1) and
-            st_dwithin(st_endpoint(d.geom), c.geom,0.1) and
-            c."""+campoDerivador+""" = 'N'
-        union
-        select
-            a.geom geom,
-                'Cable cortado' as tipo
-        from(
-            select distinct
-                row_number() over() id,
-                st_endpoint(d.geom) geom,
-                c.geom ctogeom
-            from
-                """+cableado+""" d
-            left join
-                (select a.geom from """+cajasSplitters+""" a  union select b.geom from cajas_empalme_"""+abrevRed+""" b ) c
-            on
-                st_dwithin(c.geom,st_endpoint(d.geom), 0.1)
-        ) a
-        where
-            a.ctogeom is null
-        union
-        select distinct
-            st_endpoint(e.geom) geom,
-            'Linea Invertida' as tipo
-        from
-            """+cableado+""" d,
-            """+cableado+""" e,
-            """+peanas_cpd_origen+""" p
-        where
-            st_endpoint(d.geom)=st_endpoint(e.geom) and
-            d.id!=e.id
-        union
-        select distinct
-            st_endpoint(d.geom) geom ,
-            'Linea Invertida' as tipo
-        from
-            """+cableado+""" d,
-            """+peanas_cpd_origen+""" p
-        where
-            st_dwithin(p.geom,st_endpoint(d.geom), 0.05)
-        union
-        select
-            st_startpoint(d.geom) geom,
-            'Necesita Cortar' as tipo
-        from
-            """+cableado+""" d,
-            """+cableado+""" e
-        where
-            st_within(st_startpoint(d.geom), ST_LineSubstring(e.geom, 0.01, 0.99 ))
-    ---------------------
-        union
-        select
-            z.egeom geom,
-            'Desconexion' as tipo
-            from
-            (select distinct
-                e.geom  egeom,
-                f.geom fgeom
-            from
-                (
-                %s
-                ) e
-            left JOIN
+   
+    sqlCreate="""Create table  errores_"""+abrevRed+""" (
+                id        serial CONSTRAINT err_"""+abrevRed+"""_key PRIMARY KEY,
+                tipo    varchar(40)
+            );
+            SELECT AddGeometryColumn( 'errores_"""+abrevRed+"""', 'geom', 25830, 'POINT', 2 );"""
 
-                (select distinct
-                    st_endpoint(a.geom) geom
-                from
-                    """+cableado+""" a ,
-                    """+cableado+""" b
-                where
-                    st_endpoint(a.geom)=st_startpoint(b.geom)
-                and a.id !=b.id) f
-                on
-                    st_dwithin(e.geom, f.geom, 0.001)
-                where
-                    f.geom is  null
-            union
-            select distinct
-                st_startpoint(e.geom)  egeom,
-                f.geom fgeom
-            from
-                """+cableado+""" e
-            left JOIN
-                (select distinct
 
-                    st_startpoint(a.geom) geom
-                from
-                    """+cableado+""" a,
-                    %s
-                    """+peanas_cpd_origen+""" c,
-                    """+cajasSplitters+""" d
-                where
-                    %s
-                    ST_dwithin(st_startpoint(a.geom), c.geom,0.01) or
-                    ST_dwithin(st_endpoint(a.geom), d.geom,0.01) ) f
-                on
-                    st_dwithin(e.geom, f.geom, 0.001)
-                where
-                    f.geom is  null) z
-            union
-            select
-                d.geom,
-                'Caja desconectada' as tipo
-            from (
-                select
-                    c2.geom,
-                    c.id
-                from
-                    """+cajasSplitters+""" c2
-            LEFT JOIN
-                (select distinct
-                    c.*
+    sqlCDsi=""" select 
+                    st_startpoint(e.geom) geom,
+                    'Caja derivadora sin indicar' as tipo
                 from
                     """+cajasSplitters+""" c,
-                    """+cableado+""" d
+                    
+                    """+cableado+""" e
                 where
-                    st_dwithin(d.geom, c.geom, 0.05)
-                ) c ON c.id = c2.id
-                ) d
-            where
-                d.id is null
-        ) the_union;
-        ALTER TABLE errores_"""+abrevRed+""" ADD PRIMARY KEY (id);
-        ALTER TABLE errores_"""+abrevRed+""" ALTER COLUMN geom type geometry(Point, 25830); """
+                   
+                    st_dwithin(st_startpoint(e.geom), c.geom,0.1) and
+                    c."""+campoDerivador+"""  = 'N';"""
+    
+    sqlCableCortado = """ select
+                            a.geom geom,
+                                'Cable cortado' as tipo
+                        from(
+                            select distinct
+                                row_number() over() id,
+                                st_endpoint(d.geom) geom,
+                                c.geom ctogeom
+                            from
+                                """+cableado+""" d
+                            left join
+                                (select a.geom from """+cajasSplitters+""" a  union select b.geom from cajas_empalme_"""+abrevRed+""" b ) c
+                            on
+                                st_dwithin(c.geom,st_endpoint(d.geom), 0.1)
+                        ) a
+                        where
+                            a.ctogeom is null; """
+    
+    sqlLinInver = """select distinct
+                        st_endpoint(e.geom) geom,
+                        'Linea Invertida' as tipo
+                    from
+                        """+cableado+""" d,
+                        """+cableado+""" e,
+                        """+peanas_cpd_origen+""" p
+                    where
+                        st_endpoint(d.geom)=st_endpoint(e.geom) and
+                        d.id!=e.id
+                    union
+                    select distinct
+                        st_endpoint(d.geom) geom ,
+                        'Linea Invertida' as tipo
+                    from
+                        """+cableado+""" d,
+                        """+peanas_cpd_origen+""" p
+                    where
+                        st_dwithin(p.geom,st_endpoint(d.geom), 0.05) ;"""
+    
+    sqlNecCaja = """ with 
+                        derivadores as (
+                            select 
+                                c.geom 
+                            from 
+                                """+cajasSplitters+""" c
+                            where 
+                                c."""+campoDerivador+""" = 'S'
+                            union 
+                            select 
+                                ce.geom 
+                            from 
+                                cajas_empalme_"""+abrevRed+""" ce        
+                        ),
+                        puntos_iniciales_1 as (
+                            select
+                                st_startpoint(d.geom) geom
+                            from
+                                """+cableado+""" d,
+                                """+cableado+""" e
+                            where
+                                st_within(st_startpoint(d.geom), ST_LineSubstring(e.geom, 0.01, 0.99 )) 
+                        ),
+                        puntos_iniciales_2 as (
+                            select
+                                st_startpoint(d.geom) geom
+                            from
+                                """+cableado+""" d,
+                                """+cableado+""" e
+                            where
+                                st_within(st_startpoint(d.geom), st_endpoint(e.geom)) and 
+                                d.rank != e.rank
+                        ),
+                        puntos_iniciales_union as (
+                            select * from puntos_iniciales_1
+                            union 
+                            select * from puntos_iniciales_2
+                        )
 
-    sqlDerCE=""" select distinct a.geom from cajas_empalme_"""+abrevRed+""" a union select distinct  b.geom from """+cajasSplitters+""" b where b."""+campoDerivador+"""='S' """
-    sqlDer="""  select distinct  b.geom from """+cajasSplitters+""" b where b."""+campoDerivador+"""='S' """
 
-    if checkCE:
-        tabCE= """ """
-        ondCE= """ """
-        ejecutaSQL(nombreBBDD,host, usuario,password,sqlDrop)
-        ejecutaSQL(nombreBBDD,host, usuario,password,sqlErrores%(sqlDer,tabCE,ondCE))
-    else:
-        tabCE= """cajas_empalme_"""+abrevRed+""" b,"""
-        condCE= """st_dwithin(st_startpoint(a.geom), b.geom, 0.01) or """
-        sqlCompleto=sqlErrores%(sqlDerCE,tabCE,condCE)
+                    SELECT
+                        piu.geom,                        
+                        'Falta una caja' as tipo
+                    FROM
+                        puntos_iniciales_union piu
+                    LEFT JOIN 
+                        derivadores der
+                    ON 
+                        st_dwithin(der.geom,piu.geom, 0.01)
+                    Where 
+                        der.geom is null;"""
+    
+    sqlDesconexion = """ with 
+                            cajas as (
+                                select 
+                                    nombre,
+                                    geom
+                                from 
+                                    """+cajasSplitters+""" 
+                                union 
+                                select 
+                                    nombre,
+                                    geom
+                                from 
+                                    cajas_empalme_"""+abrevRed+"""
+                                union
+                                select 
+                                    nombre,
+                                    geom 
+                                from 
+                                    """+peanas_cpd_origen+"""
+                            )
+                        select distinct
+                            st_startpoint(d.geom) geom,
+                            'Desconexion' as tipo
+                        from    
+                            """+cableado+""" d
+                        where 
+                            d.nombre NOT IN ( select            
+                                                    d.nombre    
+                                                from 
+                                                    """+cableado+""" d ,
+                                                    cajas bcj
+                                                where 
+                                                    st_dwithin(bcj.geom,st_startpoint(d.geom),0.01)) ;"""
+    sqlCajasDesconectadas = """ select
+                                    d.geom,
+                                    'Caja desconectada' as tipo
+                                from (
+                                    select
+                                        c2.geom,
+                                        c.id
+                                    from
+                                        """+cajasSplitters+""" c2
+                                LEFT JOIN
+                                    (select distinct
+                                        c.*
+                                    from
+                                        """+cajasSplitters+""" c,
+                                        """+cableado+""" d
+                                    where
+                                        st_dwithin(d.geom, c.geom, 0.05)
+                                    ) c ON c.id = c2.id
+                                    ) d
+                                where
+                                    d.id is null ; """
 
-        ejecutaSQL(nombreBBDD,host, usuario,password,sqlDrop)
-        ejecutaSQL(nombreBBDD,host, usuario,password,sqlCompleto)
+    listaSQL = [sqlCDsi,sqlCableCortado,sqlLinInver,sqlNecCaja,sqlDesconexion,sqlCajasDesconectadas]
+    
+    ejecutaSQL(nombreBBDD,host, usuario,password,sqlDrop)
+    ejecutaSQL(nombreBBDD,host, usuario,password,sqlCreate)
+
+    for sql in listaSQL:
+
+        sqlInsert = """INSERT INTO errores_"""+abrevRed+"""(geom, tipo) %s""" %sql
+
+        
+        ejecutaSQL(nombreBBDD,host, usuario,password,sqlInsert)
+
+    
 
     canvas = qgis.utils.iface.mapCanvas()
     sql=''
@@ -1056,7 +1146,7 @@ def actualizaNombre(baseDatosNombre, host,  usuario,password):
                     a.destino not like 'LIBRE' and
                     a.destino not like 'RESERVA' and
                     a.destino not like 'T-%' and
-                    length(a.nombre)="""+str(6+(i*3))
+                    length(a.nombre)="""+str(7+(i*2))
         sqlUpdate2="""insert into peana_fibra_raiz (splitter, fibra_raiz) %s ;"""
         if i == 1:
             ejecutaSQL(baseDatosNombre, host,  usuario,password,sqlUpdate2%sqlCore)
@@ -1083,6 +1173,7 @@ def actualizaNombre(baseDatosNombre, host,  usuario,password):
                     where
                         origen"""+str(iii)+""".f="""+aliasSQL2+""".destino"""
                     sql1=sqlAnid2 % sql1
+            
             ejecutaSQL(baseDatosNombre, host,  usuario,password, sqlUpdate2 % sql1)
 
     sqlAct= """UPDATE cto SET nombre_alternativo = a.n_alt from (
@@ -1122,6 +1213,11 @@ def actualizaNombre(baseDatosNombre, host,  usuario,password):
     where
         a.cto=cto.nombre;"""
     ejecutaSQL(baseDatosNombre, host, usuario,password, sqlAct)
+
+
+
+
+     
 
 
 
@@ -1284,9 +1380,17 @@ class GeoFibra:
         self.dockwidget.sennalCableTroncal.connect(self.rt)
         self.dockwidget.sennalModeloCable.connect(self.addModel)
         self.dockwidget.sennalDistancias.connect(self.calculaDistancias)
+        self.dockwidget.sennalExporta.connect(self.exporta_dpkg)
+        self.dockwidget.sennalImporta.connect(self.importa_dpkg)        
+        self.dockwidget.sennalCto_plus.connect(self.cto_plus)
+        self.dockwidget.sennalCto_rem.connect(self.ctoRemove)
+
 #Funcion para actualizar conexiones
     def actConex2(self):
         actConex(self)
+#Funcion para actualizar splitters
+    def actualizaSplitters(self, conexion):
+        creSplittersDist( conexion, 'nombre','splitters', 'ratio_spliteo', '(select distinct c.* from cto c where c.nombre NOT IN ( select distinct nombre_cto from splitters))')
 
 #Funcion que crea el proyecto nuevo.
     def creaProyecto(self, Nombre_BBDD, Usuario, host, password):
@@ -1492,6 +1596,7 @@ class GeoFibra:
 
             cur2.execute(""" CREATE TABLE cpd (
                 id        serial CONSTRAINT cpdkey PRIMARY KEY,
+                nombre    varchar(40),
                 n_tarjeta integer,
                 n_puertos integer
 
@@ -1553,26 +1658,20 @@ class GeoFibra:
             iface.messageBar().pushMessage(u"Atención:",'Selecciona una ruta de archivo.', QgsMessageBar.WARNING, 10)
         else:
             credenciales(nombreConexion)
-            contenido = []
+            fichero_temp= home+"\.qgis2\python\plugins\GeoFibra\\temp\cat_15.txt" 
+            
             with io.open(rutaArchivoCAT, 'r', encoding='cp1252') as f:
-               
-                for line in f:
-                        if line[0:2] == '15':
-                            line.encode("utf-8")
-                            contenido.append(line)
-            sqlCreate = """drop table  if exists tipo15; create table tipo15( TIPO_REG integer , BLANK_1  varchar(21),COD_DEL_MEH varchar(2),  COD_MUN integer, CLAS_BI  varchar(2),  REF_CAT_PARC  varchar(14),  N_SEC_BI  varchar(4),  "1CC"  varchar(1),  "2CC"  varchar(1),  N_F_BI_GERCAT  varchar(8),  ID_BI_AYTO  varchar(15),  N_FREG  varchar(19),  COD_PROVINE  varchar(2),   NOM_PROV  varchar(25),   DGC  varchar(3),  CODINE  varchar(3),   NOM_MUN  varchar(40),   ENT_MENOR  varchar(30),  COD_VIA  varchar(5),   TIPO_VIA  varchar(5),  NOM_VIA  varchar(25),  "1NOM_POL"  varchar(4),  "1LETRA_DUPL" varchar(1),  "2NUMPOL"  varchar(4),  "2LETRA_DUPL"  varchar(1),  KM  varchar(5),  BLOQUE  varchar(4),  ESCALERA  varchar(2),  PLANTA  varchar(3),  PUERTA  varchar(3),  TXTDIR  varchar(25),   COD_POST  varchar(5),  DISTMUN  varchar(2),   DGC_2  varchar(3),  COD_ZONA_CONC  varchar(2),   COD_POL  varchar(3),  COD_PARC  varchar(5),   COD_PARAJE  varchar(5),  NOMBRE_PARAJE  varchar(30),  BLANK_2  varchar(30),  N_ORDEN_INM  varchar(4),  ANN_ANT  varchar(4),  BLANK_3  varchar(52),  USO  varchar(1),  BLANK  varchar(13),  SUP_EL  varchar(10),  SUP_INM  varchar(10),  COEF_PROP  varchar(9),  BLANK_4  varchar(530));"""
+                with open(fichero_temp, "w") as f2:               
+                    for line in f:
+                            if line[0:2] == '15':
+                                linea = line[0:2]+'|'+line[2:23]+'|'+ line[23:25]+'|'+ line[25:28]+'|'+  line[28:30]+'|'+   line[30:44]+ '|'+ line[44:48]+ '|'+ line[48:49] +'|'+ line[49:50]+'|'+ line[50:58] +'|'+  line[58:73] +'|'+  line[73:92] + '|'+  line[92:94]+'|'+   line[94:119] + '|'+  line[119:122] +'|'+  line[122:125] +'|'+  line[125:165]+'|'+  line[165:195] +'|'+  line[195:200] +'|'+  line[200:205] +'|'+   line[205:230]+'|'+   line[230:234]+'|'+  line[234:235]+'|'+  line[235:239] + '|'+ line[239:240] +'|'+  line[240:245] +'|'+  line[245:249]+'|'+ line[249:251] +'|'+  line[251:254] +'|'+   line[254:257]+'|'+  line[257:282] + '|'+  line[282:287] + '|'+  line[287:289]+'|'+   line[289:292]+'|'+  line[292:294] +'|'+  line[294:297] +'|'+  line[297:302] +'|'+  line[302:307] + '|'+  line[307:337]+'|'+  line[337:367] +'|'+   line[367:371]+'|'+  line[371:375]+ '|'+ line[375:427]+ '|'+ line[427:428]+'|'+  line[428:441] + '|'+ line[441:451] + '|'+line[451:461] + '|'+  line[461:470] + '|'+  line[470:1000]                    
+                                linea.encode("utf-8")
+                                f2.write(linea.encode('ascii', 'ignore')) 
+            sqlCreate = """drop table  if exists tipo15; create table tipo15( TIPO_REG varchar(4) , BLANK_1  varchar(21),COD_DEL_MEH varchar(2),  COD_MUN integer, CLAS_BI  varchar(2),  REF_CAT_PARC  varchar(14),  N_SEC_BI  varchar(4),  "1CC"  varchar(1),  "2CC"  varchar(1),  N_F_BI_GERCAT  varchar(8),  ID_BI_AYTO  varchar(15),  N_FREG  varchar(19),  COD_PROVINE  varchar(2),   NOM_PROV  varchar(25),   DGC  varchar(3),  CODINE  varchar(3),   NOM_MUN  varchar(40),   ENT_MENOR  varchar(30),  COD_VIA  varchar(5),   TIPO_VIA  varchar(5),  NOM_VIA  varchar(25),  "1NOM_POL"  varchar(4),  "1LETRA_DUPL" varchar(1),  "2NUMPOL"  varchar(4),  "2LETRA_DUPL"  varchar(1),  KM  varchar(5),  BLOQUE  varchar(4),  ESCALERA  varchar(2),  PLANTA  varchar(3),  PUERTA  varchar(3),  TXTDIR  varchar(25),   COD_POST  varchar(5),  DISTMUN  varchar(2),   DGC_2  varchar(3),  COD_ZONA_CONC  varchar(2),   COD_POL  varchar(3),  COD_PARC  varchar(5),   COD_PARAJE  varchar(5),  NOMBRE_PARAJE  varchar(30),  BLANK_2  varchar(30),  N_ORDEN_INM  varchar(4),  ANN_ANT  varchar(4),  BLANK_3  varchar(52),  USO  varchar(1),  BLANK  varchar(13),  SUP_EL  varchar(10),  SUP_INM  varchar(10),  COEF_PROP  varchar(9),  BLANK_4  varchar(530));"""
             sqlEncoding = """SET client_encoding to 'UTF8';"""
             ejecutaSQL(nombreBBDD, host, usuario, password, sqlCreate)
-            ejecutaSQL(nombreBBDD, host, usuario, password, sqlEncoding)          
-            
-            contenido2=[]
-            for i in contenido:
-                contenido2.append(i.replace("'","-"))              
-                
-            for record in contenido2:
-                sqlCon = """insert into tipo15 (TIPO_REG  , BLANK_1  ,COD_DEL_MEH ,  COD_MUN , CLAS_BI  ,  REF_CAT_PARC ,  N_SEC_BI  ,  "1CC" ,  "2CC"  ,  N_F_BI_GERCAT  ,  ID_BI_AYTO ,  N_FREG  ,  COD_PROVINE  ,   NOM_PROV ,   DGC ,  CODINE ,   NOM_MUN  ,   ENT_MENOR  ,  COD_VIA ,   TIPO_VIA ,  NOM_VIA ,  "1NOM_POL" ,  "1LETRA_DUPL",  "2NUMPOL" ,  "2LETRA_DUPL"  ,  KM  ,  BLOQUE ,  ESCALERA ,  PLANTA  ,  PUERTA ,  TXTDIR ,   COD_POST  ,  DISTMUN  ,   DGC_2  ,  COD_ZONA_CONC  ,   COD_POL  ,  COD_PARC ,   COD_PARAJE  ,  NOMBRE_PARAJE  ,  BLANK_2  ,  N_ORDEN_INM  ,  ANN_ANT  ,  BLANK_3  ,  USO  ,  BLANK  ,  SUP_EL  ,SUP_INM  ,  COEF_PROP  ,  BLANK_4  ) values ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s');"""%(record[0:2],  record[2:23], record[23:25],    record[25:28],  record[28:30] ,   record[30:44],  record[44:48],  record[48:49] , record[49:50], record[50:58] ,  record[58:73] ,  record[73:92] ,   record[92:94],   record[94:119] ,   record[119:122] ,  record[122:125] ,  record[125:165],  record[165:195] ,  record[195:200] ,  record[200:205] ,   record[205:230],   record[230:234],  record[234:235],  record[235:239] ,  record[239:240] ,  record[240:245] ,  record[245:249], record[249:251] ,  record[251:254] ,   record[254:257],  record[257:282] ,   record[282:287] ,   record[287:289],   record[289:292],  record[292:294] ,  record[294:297] ,  record[297:302] ,  record[302:307] ,   record[307:337],  record[337:367] ,   record[367:371],  record[371:375],  record[375:427],  record[427:428],  record[428:441] ,  record[441:451] , record[451:461] ,   record[461:470] ,   record[470:1000])
-
-                ejecutaSQL(nombreBBDD, host, usuario, password,sqlCon)
+            ejecutaSQL(nombreBBDD, host, usuario, password, sqlEncoding)            
+            ejecutaSQL(nombreBBDD, host, usuario, password,""" COPY tipo15 ( tipo_reg , blank_1 ,cod_del_meh ,  cod_mun , clas_bi ,  ref_cat_parc ,  n_sec_bi , "1CC" ,  "2CC" ,  n_f_bi_gercat,  id_bi_ayto,  n_freg,  cod_provine,   nom_prov,   dgc,  codine,   nom_mun ,   ent_menor,  cod_via,   tipo_via,  nom_via,  "1NOM_POL",  "1LETRA_DUPL",  "2NUMPOL",  "2LETRA_DUPL"  ,  km ,  bloque ,  escalera,  planta ,  puerta ,  txtdir ,   cod_post ,  distmun ,   dgc_2 ,  cod_zona_conc ,   cod_pol,  cod_parc ,   cod_paraje  ,  nombre_paraje  ,  blank_2,  n_orden_inm ,  ann_ant ,  blank_3 ,  uso  ,  blank  ,  sup_el ,  sup_inm  ,  coef_prop ,  blank_4 ) FROM '"""+fichero_temp+"""' ( delimiter '|' );""")
             
             capasNSP('CATASTRO',host, nombreBBDD,usuario, password, 'tipo15', 'Tipo 15')
             mensaje = u'La importación ha tenido éxito'
@@ -1664,7 +1763,7 @@ class GeoFibra:
         sqlCond =' '
         listaTablas=['uuii', 'uuii_masa', 'masa_uuii_ict','masa_uuii_no_ict']
         for i in listaTablas:
-            print nombreBBDD,host, usuario,password
+            
             ejecutaSQL(nombreBBDD,host, usuario,password,'drop table if exists '+i+';')
 
         sql_uuii_parc= """ CREATE TABLE uuii as (SELECT row_number() over() as id,"parcela"."refcat",Count("tipo15"."uso") as uuii ,"tipo15"."ann_ant"::integer as year,"parcela"."geom" FROM "parcela", "tipo15" WHERE "tipo15"."ref_cat_parc"="parcela"."refcat" and %s GROUP BY "parcela"."refcat", "parcela"."geom" ,"parcela"."id","tipo15"."ann_ant"); ALTER TABLE uuii ADD PRIMARY KEY (id);"""
@@ -1717,7 +1816,7 @@ class GeoFibra:
         ALTER TABLE masa_uuii_no_ict ALTER COLUMN geom type geometry(Polygon, 25830);
         ALTER TABLE masa_uuii_no_ict ADD column id bigserial;
         ALTER TABLE masa_uuii_no_ict ADD PRIMARY KEY (id);"""
-
+        
         ejecutaSQL(nombreBBDD,host, usuario,password,sql_completa_uuii)
         ejecutaSQL(nombreBBDD,host, usuario,password,sql_uuii_masa)
 
@@ -1887,7 +1986,7 @@ class GeoFibra:
         sql_splitters = """ CREATE TABLE splitters (id serial CONSTRAINT firstkey PRIMARY KEY,nombre_cto  varchar(40) NOT NULL, n_splitter  integer NOT NULL, pat_splitter integer, cliente varchar(50));"""
         ejecutaSQL(nombreBBDD,host, usuario,password,sql_splitters)
 
-        creSplittersDist('nombre','splitters', 'ratio_spliteo')
+        creSplittersDist('nombre','splitters', 'ratio_spliteo', '')
         capasNSP('VARIOS',host, nombreBBDD,usuario, password, 'splitters', 'Splitters')
         relaciones('Splitters', 'CTO', 'nombre_cto', 'nombre','relacion_splitters',  'Splitter CTO')
         mensaje = u"Creación de CTO's y Tabla de splitters realizada"
@@ -1959,7 +2058,7 @@ class GeoFibra:
         ejecutaSQL(nombreBBDD,host, usuario,password,sql_splitters)
 
         qmlCto=home+"""/.qgis2/python/plugins/GeoFibra/estilos/cto.qml"""
-        creSplittersDist('nombre','splitters', 'ratio_spliteo')
+        creSplittersDist('nombre','splitters', 'ratio_spliteo', '')
 
         capasNSP('VARIOS',host, nombreBBDD,usuario, password, 'splitters', 'Splitters')
         capas('DISTRIBUCION',host,nombreBBDD, usuario, password, 'cto', 'CTO', qmlCto)
@@ -1969,7 +2068,7 @@ class GeoFibra:
         QMessageBox.information(None, "INFO", mensaje)
 
 #Funcion que servira para el trabajo con la RD
-    def rd(self, checkNombrado, checkConteo, checkCE,checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion):
+    def rd(self, checkNombrado, checkConteo, checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion):
         credenciales(conexion)
         layerModelos = QgsMapLayerRegistry.instance().mapLayersByName( 'Modelos Cables' )[0]
         if layerModelos.featureCount()==0:
@@ -1988,7 +2087,7 @@ class GeoFibra:
             peanas_cpd_origen = 'peanas'
             nombreCapaTOC = 'Errores Distribucion'
             campoDerivador = 'derivadora'
-            errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC, checkCE, checkSD, campoDerivador)
+            errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC,  checkSD, campoDerivador)
             sql=''
             uri = QgsDataSourceURI()
             uri.setConnection(host, '5432', nombreBBDD, usuario, password)
@@ -1997,9 +2096,9 @@ class GeoFibra:
             vlayer = QgsVectorLayer(uri.uri(), nombreCapaTOC, "postgres")
 
             sqlSelectNombreDist = """   case when
-                                            c.cluster::integer < 10 then ('D-"""+acron_pob+"""-00'||c.cluster||'-00'||ROW_NUMBER () OVER (partition by c.cluster order by t.id))
+                                            c.cluster::integer < 10 then ('D-"""+acron_pob+"""-00'||c.cluster||'-00'||ROW_NUMBER () OVER (partition by c.cluster order by ST_Azimuth(st_startpoint(t.geom), ST_LineInterpolatePoint(t.geom, 0.001))))
                                         else
-                                            ('D-"""+acron_pob+"""-0'||c.cluster||'-00'||ROW_NUMBER () OVER (partition by c.cluster order by t.id))
+                                            ('D-"""+acron_pob+"""-0'||c.cluster||'-00'||ROW_NUMBER () OVER (partition by c.cluster order by ST_Azimuth(st_startpoint(t.geom), ST_LineInterpolatePoint(t.geom, 0.001))))
                                         end nombre, """
             if vlayer.featureCount()==0:
                 if checkNombrado:
@@ -2025,7 +2124,7 @@ class GeoFibra:
                 if checkCartaEmp:
                     iface.messageBar().pushMessage(u"INFO",u'Comienza la creación de la Carta de Empalmes.', QgsMessageBar.INFO, 10)
                     mensaje = mensaje+', carta de empalmes'
-                    carta_empalmes(nombreBBDD, host, usuario,password,'Dist-Cableado', 'distribucion', 'cto_cables', 'cto', 'derivadora', 'Dist')
+                    carta_empalmes(nombreBBDD, host, usuario,password,'Dist-Cableado', 'distribucion', 'cto_cables', 'cto', 'derivadora', 'Dist',13)
                     relaciones('Dist-Carta de Empalmes', 'Dist-Cableado', 'nombre', 'nombre', 'id_dist_ce','dist_ce')
 
                 if checkEtiq:
@@ -2112,7 +2211,7 @@ class GeoFibra:
             iface.messageBar().pushMessage("AVISO", 'Selecciona cables invertidos.', level=QgsMessageBar.WARNING)
 
 #Funcion que servira para el trabajo con la RT
-    def rt(self,checkNombrado, checkConteo, checkCE,checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion):
+    def rt(self,checkNombrado, checkConteo, checkSD,checkCartaEmp,checkEtiq, porceRes, acron_pob,conexion):
         global nombreRed
         nombreRed = 'troncal'
         global nombreCapaCableado
@@ -2125,7 +2224,7 @@ class GeoFibra:
         peanas_cpd_origen = 'cpd'
         nombreCapaTOC = 'Errores Troncal'
         campoDerivador = 'derivador'
-        errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC, checkCE, checkSD, campoDerivador)
+        errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen,nombreCapaTOC, checkSD, campoDerivador)
         sql=''
         uri = QgsDataSourceURI()
         uri.setConnection(host, '5432', nombreBBDD, usuario, password)
@@ -2172,7 +2271,7 @@ class GeoFibra:
 
             if checkCartaEmp:
                 mensaje = mensaje+', carta de empalmes'
-                carta_empalmes(nombreBBDD, host, usuario,password,'Tr-Cableado', 'troncal', 'peanas_cables', 'peanas', 'derivador', 'Tr')
+                carta_empalmes(nombreBBDD, host, usuario,password,'Tr-Cableado', 'troncal', 'peanas_cables', 'peanas', 'derivador', 'Tr',9)
 
                 sqlDrop = """ DROP TABLE IF EXISTS splitters_peanas ;"""
                 sqlSplittersPeanas = """ CREATE TABLE splitters_peanas (id serial, nombre_peana varchar(40) NOT NULL, fibra_troncal varchar(40), splitter_num integer NOT NULL, patilla_splitter integer NOT NULL, nom_fib_dist varchar (100), cto varchar(40), PRIMARY KEY(id));"""
@@ -2199,124 +2298,133 @@ class GeoFibra:
 
                                 ejecutaSQL(nombreBBDD, host, usuario,password,sqlF)
 
-                sql1= """ update    splitters_peanas set fibra_troncal=aa.fib_tronc, nom_fib_dist=aa.fibra_dist      from(
-                                select fib_tronc, peana, splitter, patilla_splitter, fibra_dist from
-                                -------select de la relacion fibras troncal con peanas  y splitters
-                                    (select
-                                        concat(carta_empalmes_troncal.nombre,', T', carta_empalmes_troncal.tubo_numero,', F', carta_empalmes_troncal.fibra) fib_tronc,
-                                        coalesce(split_part(destino, '.', 1)) peana,
-                                        coalesce(split_part(destino, '.', 2)) AS splitter
-                                    from
-                                        carta_empalmes_troncal
-                                    where
-                                        substring(destino, 1, 1)='P') tronc_peana,
-                                -------select de la relacion fibras distribucion con peanas y splitters
-                                        (select
-                                            nombre_peana,
-                                            splitter_num,
-                                            patilla_splitter,
-                                            fibra_dist
-                                        from
-                                            (select
-                                                *,
-                                                ROW_NUMBER () OVER (PARTITION BY splitters_peanas.nombre_peana order by splitters_peanas.splitter_num, splitters_peanas.patilla_splitter ) id_patilla
-                                            from
-                                                splitters_peanas) split_pat ,
-
-                                            (select
-                                                ROW_NUMBER () OVER (PARTITION BY pean_nom order by carta_empalmes_distribucion.nombre, carta_empalmes_distribucion.id_fibra ) id_patilla,
-                                                concat(carta_empalmes_distribucion.nombre, ', T',carta_empalmes_distribucion.tubo_numero, ', F',carta_empalmes_distribucion.fibra ) fibra_dist,
-                                                dist_peana.pean_nom
-
-                                            from
-                                                carta_empalmes_distribucion,
-                                                (select
-                                                    dist.nombre nom_dist,
-                                                    peanas.nombre pean_nom
-                                                from
-                                                    distribucion dist,
-                                                    peanas peanas
-                                                where
-                                                    st_dwithin(dist.geom,peanas.geom,0.01 )
-                                                order by
-                                                    dist.nombre) dist_peana
-                                            Where
-                                                destino !='RESERVA' and
-                                                destino !='LIBRE' and
-                                                dist_peana.nom_dist=carta_empalmes_distribucion.nombre
-                                            order by
-                                                nombre, tubo_numero, id_fibra) dist_pat
-                                        where
-                                            dist_pat.pean_nom::varchar=split_pat.nombre_peana::varchar and
-                                            dist_pat.id_patilla=split_pat.id_patilla) dist_peana
-                                ---Condicionales-------------------
-                                where
-                                    dist_peana.nombre_peana=tronc_peana.peana and
-                                    dist_peana.splitter_num::varchar=tronc_peana.splitter) aa
-                            where
-                                splitters_peanas.nombre_peana=aa.peana and
-                                splitters_peanas.splitter_num=aa.splitter::integer and
-                                splitters_peanas.patilla_splitter=aa.patilla_splitter::integer """
-
-                ejecutaSQL(nombreBBDD, host, usuario,password,sql1)
+               
                 distribucion=QgsMapLayerRegistry.instance().mapLayersByName( 'Dist-Cableado' )[0]
                 listaRanks=[]
                 for f in distribucion.getFeatures():
                     listaRanks.append(f["rank"])
-                rankMax= max(listaRanks)
-
-                for i in range(1,rankMax+1):
-                    sqlCore="""select
-                                a.destino,
-                                a.nombre,
-                                a.tubo_numero,
-                                a.fibra
-                            from
-                                carta_empalmes_distribucion a
-                            where
-                                a.destino not like 'LIBRE' and
-                                a.destino not like 'RESERVA' and
-                                a.destino not like 'D-%' and
-                                length(a.nombre)="""+str(10+(i*3))
-
-                    sqlUpdate="""UPDATE splitters_peanas
-                                SET cto=aa.destino
-                                FROM (%s) aa
-                                WHERE nom_fib_dist=concat(aa.nombre,', T',aa.tubo_numero,', F',aa.fibra);"""
-
-                    if i == 1:
-
-                        ejecutaSQL(nombreBBDD, host, usuario,password,sqlUpdate %sqlCore)
+                longitudRanks = len(set(listaRanks))+1
+                sqlFrom = ''
+                sqlSelect =''
+                sqlWhere = ''
+                sqlUpdate = """ UPDATE splitters_peanas SET cto=a.destino_final, nom_fib_dist=a.fib_dist FROM (%s) a WHERE a.id = splitters_peanas.id;"""
+                for i in range(1,longitudRanks):
+                    sqlWith = 'With '
+                    
+                    sqlFrom = sqlFrom+' origen_'+str(i)+','
+                    
+                    
+                    if i ==1:
+                        print '=======Este es el rank', i
+                        sqlCore = """WITH origen_1 as (select
+                                                a.destino,
+                                                a.nombre,
+                                                a.tubo_numero,
+                                                a.fibra
+                                            from
+                                                carta_empalmes_distribucion a
+                                            where
+                                                a.destino not like 'LIBRE' and
+                                                a.destino not like 'RESERVA' and
+                                                a.destino not like 'D-%' and
+                                                length(a.nombre)="""+str(11+(i*2))+"""), kk as (
+                                                SELECT  
+                                    destino destino_final,
+                                    concat(origen_1.nombre,', T',origen_1.tubo_numero,', F',origen_1.fibra),
+                                    row_number() over(partition by split_part(origen_1.nombre,'-',3) order by origen_1.nombre, origen_1.tubo_numero, origen_1.fibra) id_2,
+                                    trim(split_part(origen_1.nombre,'-',3),'0') peana
+                                from origen_1),
+                                patillas_libres as (
+                                    select
+                                        id,
+                                        split_part(nombre_peana,'-',3) nombre_peana,
+                                        row_number() over(partition by nombre_peana order by splitter_num, patilla_splitter) id_patilla_libre
+                                    from 
+                                        splitters_peanas 
+                                    where 
+                                        nom_fib_dist='LIBRE')
+                                select 
+                                    patillas_libres.id, 
+                                    kk.destino_final,
+                                    kk.concat fib_dist 
+                                from 
+                                    patillas_libres,
+                                    kk
+                                where 
+                                    patillas_libres.id_patilla_libre = kk.id_2 and
+                                    patillas_libres.nombre_peana = kk.peana """
+                        ejecutaSQL(nombreBBDD, host, usuario,password, sqlUpdate % sqlCore)
 
                     else:
-                        for ii in range(1,i):
-                            aliasSQL=string.ascii_lowercase[ii]
-                            sqlAnid=""" select
-                                    origen"""+str(ii)+""".destino,
-                                    """+aliasSQL+""".nombre,
-                                    """+aliasSQL+""".tubo_numero,
-                                    """+aliasSQL+""".fibra
-                                from
-                                    (%s) origen"""+str(ii)+""",
-                                    carta_empalmes_distribucion """+aliasSQL+"""
-                                where
-                                    concat(origen"""+str(ii)+""".nombre,', T',origen"""+str(ii)+""".tubo_numero,', F',origen"""+str(ii)+""".fibra)="""+aliasSQL+""".destino """
-                            sql1=sqlAnid % sqlCore
-                            for iii in range(1,ii):
-                                aliasSQL2=string.ascii_lowercase[ii+1]
-                                sqlAnid2=""" select
-                                    origen"""+str(iii)+""".destino,
-                                    """+aliasSQL2+""".nombre,
-                                    """+aliasSQL2+""".tubo_numero,
-                                    """+aliasSQL2+""".fibra
-                                from
-                                    (%s) origen"""+str(iii)+""",
-                                    carta_empalmes_distribucion """+aliasSQL2+"""
-                                where
-                                    concat(origen"""+str(iii)+""".nombre,', T',origen"""+str(iii)+""".tubo_numero,', F',origen"""+str(iii)+""".fibra)="""+aliasSQL2+""".destino"""
-                                sql1=sqlAnid2 % sql1
+                        sqlWhere = sqlWhere+'''concat(origen_'''+str(i)+'''.nombre,', T',origen_'''+str(i)+'''.tubo_numero,', F',origen_'''+str(i)+'''.fibra)=origen_'''+str(i-1)+'''.destino and '''
+                        print '=======Este es el rank', i
+                        sqlSelect =''' origen_'''+str( i)+'''.destino destino_final,'''
+                        sqlAdd = """ """ 
+                        for ii in range(1,i+1):
+                            
+                            if ii == i:
+                                sqlCore = """SELECT
+                                                    a.destino,
+                                                    a.nombre,
+                                                    a.tubo_numero,
+                                                    a.fibra
+                                                from
+                                                    carta_empalmes_distribucion a
+                                                where
+                                                    a.destino not like 'LIBRE' and
+                                                    a.destino not like 'RESERVA' and
+                                                    a.destino not like 'D-%' and
+                                                    length(a.nombre)="""+str(11+(ii*2))+"""),"""
+                                sqlCore = ' origen_'+str(ii)+' as ('+sqlCore
+                                sqlAdd = sqlAdd + sqlCore
 
-                        ejecutaSQL(nombreBBDD, host, usuario,password, sqlUpdate % sql1)
+                            
+                               
+                            else:
+                                sqlCore = """SELECT
+                                                    a.destino,
+                                                    a.nombre,
+                                                    a.tubo_numero,
+                                                    a.fibra
+                                                from
+                                                    carta_empalmes_distribucion a
+                                                where
+                                                    a.destino not like 'LIBRE' and
+                                                    a.destino not like 'RESERVA' and
+                                                    a.destino like 'D-%' and
+                                                    length(a.nombre)="""+str(11+(ii*2))+"""),"""
+                                sqlCore = ' origen_'+str(ii)+' as ('+sqlCore
+                                sqlAdd = sqlAdd + sqlCore
+                               
+                        selectFinal = """ 
+                                        kk as(select"""+sqlSelect + """concat(origen_1.nombre,', T',origen_1.tubo_numero,', F',origen_1.fibra),row_number() over(partition by split_part(origen_1.nombre,'-',3) order by origen_1.nombre, origen_1.tubo_numero, origen_1.fibra) id_2,
+                                                trim(split_part(origen_1.nombre,'-',3),'0') peana"""+""" from """+sqlFrom[:-1]+""" where """+sqlWhere[:-4]+"""),"""
+                        
+                        sqlSpP = """ 
+                            patillas_libres as (
+                                select
+                                    id,
+                                    split_part(nombre_peana,'-',3) nombre_peana,
+                                    row_number() over(partition by nombre_peana order by splitter_num, patilla_splitter) id_patilla_libre
+                                from 
+                                    splitters_peanas 
+                                where 
+                                    nom_fib_dist='LIBRE')"""
+                        sqlAdd =  sqlWith+sqlAdd + selectFinal+sqlSpP
+                        sqlSelecFin2 = """
+                            select 
+                                patillas_libres.id, 
+                                kk.destino_final,
+                                kk.concat fib_dist 
+                            from 
+                                patillas_libres,
+                                kk
+                            where 
+                                patillas_libres.id_patilla_libre = kk.id_2 and
+                                patillas_libres.nombre_peana = kk.peana """
+
+                        sqlAdd= sqlAdd+sqlSelecFin2 
+                        ejecutaSQL(nombreBBDD, host, usuario,password, sqlUpdate % sqlAdd)
                 sqlOrd = """create table splitters_peanas2 as select * from splitters_peanas order by nombre_peana, splitter_num, patilla_splitter asc;
                 ALTER TABLE splitters_peanas RENAME TO "table_old";
                 ALTER TABLE splitters_peanas2 RENAME TO splitters_peanas;
@@ -2451,7 +2559,156 @@ class GeoFibra:
             self.dockwidget.checkBox_sinCE_tr.setEnabled(False)
 
 
+    def buscarArchivos(self):
+        title = 'Open File'
+        path = ''
+        qfd = QFileDialog().getSaveFileName(None, title, path, '*.gpkg')           
+        if qfd[-5:]=='.gpkg':
+            pass 
 
+        else:
+            qfd = qfd+'.gpkg'
+        self.dockwidget.archivo_gpkg.setText(qfd)
+
+    def exporta_dpkg(self, nombreConexion):
+        credenciales(str(nombreConexion))   
+        nombreArchivo = self.dockwidget.archivo_gpkg.text()
+        con = connect(dbname=nombreBBDD, user=usuario, host=host, password=password)
+        con.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = con.cursor() 
+
+
+        #clear the message bar
+        qgis.utils.iface.messageBar().clearWidgets() 
+        #set a new message bar
+        progressMessageBar = qgis.utils.iface.messageBar()
+
+        ######################################
+        # Prepare your progress Bar
+        ######################################
+        progress = QProgressBar()
+        #Maximum is set to 100, making it easy to work with percentage of completion
+        progress.setMaximum(100) 
+        #pass the progress bar to the message Bar
+        progressMessageBar.pushWidget(progress)
+        j = 0
+        try:        
+            dicTablas = {'cajas_empalme_distribucion': 1,'cajas_empalme_troncal': 1,'carta_empalmes_distribucion': 0,'carta_empalmes_troncal': 0,'cpd': 1,'cpd_gpon': 0,'cto': 1,'cto_cables': 0,'dist_cto': 1,'distribucion': 1,'etiquetado_fibras_distribucion': 1,'etiquetado_fibras_troncal': 1,'etiquetado_peanas': 1,'fcl_distribucion': 0,'fcl_distribucion_acumulado': 0,'fcl_troncal' : 0,'fcl_troncal_acumulado': 0,'modelos_cable': 0,'peana_fibra_raiz' : 0,'peanas' : 1,'peanas_cables': 0,'splitters_peanas': 0,'troncal': 1,'troncal_peana': 1, 'layer_styles':0 }
+            n_it= len(dicTablas)
+            command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:'dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""'"""
+            for i,esp in dicTablas.items():                                    
+                cur.execute("""select column_name from information_schema.columns where table_schema = 'public' and table_name='"""+i+"""'""")
+                col = cur.fetchall()
+                j = j + 1
+                percent = (j/float(n_it)) * 100
+                progress.setValue(percent)
+                #optionnal, make your processing longer to enjoy your process bar :)
+                time.sleep(1)
+                listaColumnas =[]
+                parte1= "select "
+                parte2=' from '+i+';'
+                for ii in col:                    
+                    if ii[0] !='id' and ii[0] !='ogc_fid' and ii[0] !='id_por_pk' and ii[0] !='fid':
+                        listaColumnas.append(ii[0])
+                for iii in listaColumnas:
+                    parte1= parte1+iii+','
+                if parte1[-1:]==',':
+                    parte1=parte1[:-1] 
+
+                if esp==1: 
+                        
+                    cur.execute("""SELECT type FROM public.geometry_columns WHERE f_table_name = '"""+i+"""' """)
+                    geometria = cur.fetchone()[0]                    
+                    command=command+' -sql "'+parte1+parte2+'" '+'-nln '+i+' -nlt '+geometria
+                elif esp==0:                    
+                    command=command+' -sql "'+parte1+parte2+'" '+'-nln '+i             
+                
+                os.system(command)
+                command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:'dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""'"""
+            
+            mensaje = u'Exportación finalizada.'
+            QMessageBox.information(None, "INFO", mensaje)
+        except ValueError:
+            iface.messageBar().pushMessage(u"Atención:",u'Ver log para más información.', QgsMessageBar.CRITICAL, 10)
+
+        cur.close() 
+        con.close()
+        qgis.utils.iface.messageBar().clearWidgets()  
+        
+    def importa_dpkg(self, nombreConexion): 
+        credenciales(str(nombreConexion))
+        nombreArchivo = self.dockwidget.archivo_importar.filePath()
+        command = """ogr2ogr %s  -t_srs epsg:25830 -f "PostgreSQL" PG:"dbname='""" + nombreBBDD + \
+                """' host='""" + host + \
+                """' user='""" + usuario + \
+                """' password='""" + password + \
+                """' port='5432' " """ + \
+                ''' "'''+ nombreArchivo+'''" -skipfailures'''       
+        if self.dockwidget.radioButton_sobreescribir.isChecked():            
+            mensaje = u'Si continúas sobreescribirás toda la BBDD.'        
+            reply = QMessageBox.question(self.iface.mainWindow(), u'¿Continuar?',mensaje, QMessageBox.Yes, QMessageBox.No)
+            
+            if reply == QtGui.QMessageBox.Yes:
+                command = command%('-overwrite -lco GEOMETRY_NAME=geom')                
+                os.system(command)
+                mensaje = u'Importación finalizada.'                
+            else:
+                return 
+                      
+        elif self.dockwidget.radioButton_annadir.isChecked():
+            command = command%(' -append -unsetFid ')             
+            os.system(command)        
+        mensaje = u'Importación finalizada.'
+        QMessageBox.information(None, "INFO", mensaje) 
+        
+    def cto_plus(self,ratioSp, spCTO, caja_ext, caja_int,nombreConexion,acron_pob):
+        credenciales(str(nombreConexion))
+        ratioSp = str(ratioSp) 
+        spCTO = str(spCTO) 
+        canvas = iface.mapCanvas() 
+        e = canvas.extent()
+        Xmed = str((e.xMaximum()  +  e.xMinimum()) /2)
+        Ymed = str((e.yMaximum()  +  e.yMinimum()) /2)
+        sqlNombreCto = """update cto set nombre = '"""+acron_pob+"""-'||id where nombre is null;"""
+        if self.dockwidget.cto_ext_plus.isChecked():
+            sqlInsert= """insert into cto(splitters, tipo_caja, situacion,ratio_spliteo,derivadora, geom)  values ("""+spCTO+""",'"""+caja_ext+"""','Exterior/Fachada',"""+ratioSp+""", 'N',ST_GeomFromText('POINT("""+Xmed+""" """+Ymed+""")', 25830));"""                       
+            ejecutaSQL(nombreBBDD,host,usuario,password,sqlInsert)  
+            ejecutaSQL(nombreBBDD,host,usuario,password,sqlNombreCto)  
+            creSplittersDist( 'nombre','splitters', 'ratio_spliteo', '(select distinct c.* from cto c where c.nombre NOT IN ( select distinct nombre_cto from splitters))')        
+            
+        elif self.dockwidget.cto_int_plus.isChecked():
+            sqlInsert= """insert into cto(splitters, tipo_caja, situacion,ratio_spliteo,derivadora, geom )  values ("""+spCTO+""",'"""+caja_int+"""','Interior/RITI',"""+ratioSp+""", 'N', ST_GeomFromText('POINT("""+Xmed+""" """+Ymed+""")', 25830));"""            
+            ejecutaSQL(nombreBBDD,host,usuario,password,sqlInsert)             
+            ejecutaSQL(nombreBBDD,host,usuario,password,sqlNombreCto)
+            creSplittersDist( 'nombre','splitters', 'ratio_spliteo', '(select distinct c.* from cto c where c.nombre NOT IN ( select distinct nombre_cto from splitters))')           
+            
+        else:
+            mensaje = u'Elige un tipo de ONT. Exterior o interior'             
+            QMessageBox.information(None, "INFO", mensaje)
+        
+        qgis.utils.iface.mapCanvas().refresh()
+        layer = QgsMapLayerRegistry.instance().mapLayersByName("CTO")[0]
+        layer.removeSelection()
+
+    def ctoRemove(self, nombreConexion):
+        credenciales(str(nombreConexion))        
+        layer = QgsMapLayerRegistry.instance().mapLayersByName("CTO")[0]        
+        features = layer.selectedFeatures()  
+        count =  layer.selectedFeatureCount()
+              
+        if count == 0:
+            mensaje = u'Selecciona una CTO'             
+            QMessageBox.information(None, "INFO", mensaje)
+        else:            
+            for i in features:
+                sqlDel1= ''' DELETE FROM cto  WHERE id='''+str(i['id'])+''';'''
+                sqlDel2= """ DELETE FROM splitters  WHERE nombre_cto='"""+str(i['nombre'])+"""';"""
+                ejecutaSQL(nombreBBDD,host,usuario,password,sqlDel1)
+                ejecutaSQL(nombreBBDD,host,usuario,password,sqlDel2)
+        qgis.utils.iface.mapCanvas().refresh()
+       
+          
+          
 
 
 
@@ -2498,11 +2755,13 @@ class GeoFibra:
         self.dockwidget.actualizaLista.clicked.connect(self.actConex2)
         self.dockwidget.botonCambiaEstilo.clicked.connect(self.cambiaEstilo)
         self.dockwidget.botonCambiaEstiloNormal.clicked.connect(self.cambiaEstiloNormal)
-
+        self.dockwidget.busca_archivos.clicked.connect(self.buscarArchivos)
+        #self.dockwidget.actualiza_splitters.clicked.connect(self.actualizaSplitters)
+        #self.dockwidget.add_ont.clicked.connect(self.cto_plus)
 
         self.dockwidget.pushButton_errorAd.setEnabled(False)
         self.dockwidget.pushButton_errorAt.setEnabled(False)
-        self.dockwidget.pushButton_RevLin.setEnabled(False)
+        self.dockwidget.pushButton_RevLin.setEnabled(False)        
 
         try:
             cajasEmpDis = QgsMapLayerRegistry.instance().mapLayersByName( 'Dist-Cajas Empalme' )[0]
