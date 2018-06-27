@@ -2756,8 +2756,7 @@ class GeoFibra:
         self.dockwidget.botonCambiaEstilo.clicked.connect(self.cambiaEstilo)
         self.dockwidget.botonCambiaEstiloNormal.clicked.connect(self.cambiaEstiloNormal)
         self.dockwidget.busca_archivos.clicked.connect(self.buscarArchivos)
-        #self.dockwidget.actualiza_splitters.clicked.connect(self.actualizaSplitters)
-        #self.dockwidget.add_ont.clicked.connect(self.cto_plus)
+        
 
         self.dockwidget.pushButton_errorAd.setEnabled(False)
         self.dockwidget.pushButton_errorAt.setEnabled(False)
