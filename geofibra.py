@@ -2624,7 +2624,7 @@ class GeoFibra:
                     command=command+' -sql "'+parte1+parte2+'" '+'-nln '+i             
                 
                 os.system(command)
-                command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:'dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""'"""
+                command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+""" " """
             
             mensaje = u'Exportación finalizada.'
             QMessageBox.information(None, "INFO", mensaje)
