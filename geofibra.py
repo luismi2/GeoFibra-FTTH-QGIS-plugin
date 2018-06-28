@@ -223,7 +223,7 @@ def creSplittersDist( campoNombre,campoSplitters, campoRatioSpliteo, nombreTabla
         for counter1 in range (1,int(feature.attributes()[idSp]+1.0)):
             for counter in range (1,int(feature.attributes()[idRatSp]+1.0)):
                 sql= """insert into splitters(nombre_cto, n_splitter,pat_splitter) values ('%s','%s','%s');"""% (feature.attributes()[idx],str(counter1),str(counter))           
-                print sql 
+                
                 ejecutaSQL(nombreBBDD,host, usuario,password,sql)
 
 #Funcion que nombra los cables primarios
@@ -2371,7 +2371,7 @@ class GeoFibra:
                                 WHERE nom_fib_dist=aa.concat; """
 
                 for rank in range(1,rankMax+1):
-                    print 'Rank __________________________________',rank
+                    
                     longitud = str(11+(rank*2))
                     sqlCore = """
                         with cd as (
@@ -2431,9 +2431,9 @@ class GeoFibra:
                                         where 
                                             concat(origen"""+posicionM+""".nombre,', T',origen"""+posicionM+""".tubo_numero,', F',origen"""+posicionM+""".fibra)=cd.destino )"""
                     
-                    print '========'
+                   
                     sqlCompo = sqlCore+saco+sqlFinal
-                    print sqlUpdate%sqlCompo
+                    
                     ejecutaSQL(nombreBBDD, host, usuario,password, sqlUpdate%sqlCompo)
                     saco=''
 
