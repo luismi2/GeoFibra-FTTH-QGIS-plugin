@@ -23,10 +23,20 @@
     </font>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QLabel" name="label">
+    <item row="2" column="2">
+     <widget class="QLineEdit" name="lineEdit">
       <property name="text">
-       <string>Conexiones:</string>
+       <string>AAA</string>
+      </property>
+      <property name="maxLength">
+       <number>3</number>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Acrónimo Población:</string>
       </property>
      </widget>
     </item>
@@ -40,27 +50,24 @@
       </property>
      </widget>
     </item>
-    <item row="2" column="0" colspan="2">
-     <widget class="QLabel" name="label_3">
-      <property name="text">
-       <string>Acrónimo Población:</string>
-      </property>
-     </widget>
-    </item>
-    <item row="2" column="2">
-     <widget class="QLineEdit" name="lineEdit">
-      <property name="text">
-       <string>AAA</string>
-      </property>
-      <property name="maxLength">
-       <number>3</number>
-      </property>
-     </widget>
-    </item>
     <item row="3" column="0" colspan="2">
      <widget class="QLabel" name="label_2">
       <property name="text">
        <string>Número Mínimo de UUII por Edificio con ICT:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="0">
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Conexiones:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="2">
+     <widget class="QSpinBox" name="spinBoxUUII">
+      <property name="value">
+       <number>8</number>
       </property>
      </widget>
     </item>
@@ -101,7 +108,7 @@
          </font>
         </property>
         <property name="text">
-         <string>nombre</string>
+         <string/>
         </property>
         <property name="echoMode">
          <enum>QLineEdit::Normal</enum>
@@ -148,7 +155,7 @@
          </font>
         </property>
         <property name="text">
-         <string>host</string>
+         <string/>
         </property>
         <property name="echoMode">
          <enum>QLineEdit::Normal</enum>
@@ -169,7 +176,7 @@
          </font>
         </property>
         <property name="text">
-         <string>password</string>
+         <string/>
         </property>
         <property name="echoMode">
          <enum>QLineEdit::Password</enum>
@@ -216,7 +223,7 @@
          </font>
         </property>
         <property name="text">
-         <string>usuario</string>
+         <string/>
         </property>
         <property name="echoMode">
          <enum>QLineEdit::Normal</enum>
@@ -667,7 +674,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>441</width>
+          <width>381</width>
           <height>401</height>
          </rect>
         </property>
@@ -997,6 +1004,61 @@
            <string>Cerrado</string>
           </property>
          </widget>
+         <widget class="QPushButton" name="add_ont">
+          <property name="geometry">
+           <rect>
+            <x>250</x>
+            <y>20</y>
+            <width>88</width>
+            <height>34</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>CTO +</string>
+          </property>
+         </widget>
+         <widget class="QRadioButton" name="cto_ext_plus">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>180</y>
+            <width>105</width>
+            <height>22</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+         <widget class="QRadioButton" name="cto_int_plus">
+          <property name="geometry">
+           <rect>
+            <x>330</x>
+            <y>220</y>
+            <width>105</width>
+            <height>22</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+         <widget class="QPushButton" name="remove_ont">
+          <property name="geometry">
+           <rect>
+            <x>250</x>
+            <y>60</y>
+            <width>88</width>
+            <height>34</height>
+           </rect>
+          </property>
+          <property name="text">
+           <string>CTO -</string>
+          </property>
+         </widget>
         </widget>
        </widget>
       </widget>
@@ -1009,12 +1071,12 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>501</width>
+          <width>441</width>
           <height>171</height>
          </rect>
         </property>
         <property name="currentIndex">
-         <number>2</number>
+         <number>0</number>
         </property>
         <widget class="QWidget" name="tab_13">
          <attribute name="title">
@@ -1049,7 +1111,7 @@
          <widget class="QCheckBox" name="checkBox_etiq">
           <property name="geometry">
            <rect>
-            <x>150</x>
+            <x>110</x>
             <y>100</y>
             <width>161</width>
             <height>22</height>
@@ -1065,7 +1127,7 @@
          <widget class="QCheckBox" name="checkBox_cartaEm">
           <property name="geometry">
            <rect>
-            <x>150</x>
+            <x>110</x>
             <y>70</y>
             <width>151</width>
             <height>22</height>
@@ -1081,7 +1143,7 @@
          <widget class="QCheckBox" name="checkBox_sinDer">
           <property name="geometry">
            <rect>
-            <x>290</x>
+            <x>250</x>
             <y>10</y>
             <width>141</width>
             <height>22</height>
@@ -1089,22 +1151,6 @@
           </property>
           <property name="text">
            <string>Sin derivaciones</string>
-          </property>
-         </widget>
-         <widget class="QCheckBox" name="checkBox_sinCE">
-          <property name="geometry">
-           <rect>
-            <x>290</x>
-            <y>40</y>
-            <width>151</width>
-            <height>22</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>Sin Cajas Empalme</string>
-          </property>
-          <property name="checked">
-           <bool>false</bool>
           </property>
          </widget>
          <widget class="QCheckBox" name="checkBox_nombrado">
@@ -1142,7 +1188,7 @@
          <widget class="QPushButton" name="pushButton_rd">
           <property name="geometry">
            <rect>
-            <x>340</x>
+            <x>270</x>
             <y>90</y>
             <width>88</width>
             <height>34</height>
@@ -1160,7 +1206,7 @@
          <widget class="QCheckBox" name="checkBox_cartaEm_tr">
           <property name="geometry">
            <rect>
-            <x>150</x>
+            <x>110</x>
             <y>70</y>
             <width>151</width>
             <height>22</height>
@@ -1192,7 +1238,7 @@
          <widget class="QPushButton" name="pushButton_tr">
           <property name="geometry">
            <rect>
-            <x>340</x>
+            <x>270</x>
             <y>90</y>
             <width>88</width>
             <height>34</height>
@@ -1221,7 +1267,7 @@
          <widget class="QCheckBox" name="checkBox_sinDer_tr">
           <property name="geometry">
            <rect>
-            <x>290</x>
+            <x>250</x>
             <y>10</y>
             <width>141</width>
             <height>22</height>
@@ -1229,22 +1275,6 @@
           </property>
           <property name="text">
            <string>Sin derivaciones</string>
-          </property>
-         </widget>
-         <widget class="QCheckBox" name="checkBox_sinCE_tr">
-          <property name="geometry">
-           <rect>
-            <x>290</x>
-            <y>40</y>
-            <width>151</width>
-            <height>22</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>Sin Cajas Empalme</string>
-          </property>
-          <property name="checked">
-           <bool>false</bool>
           </property>
          </widget>
          <widget class="QSpinBox" name="spinBoxFibRes_tr">
@@ -1263,7 +1293,7 @@
          <widget class="QCheckBox" name="checkBox_etiq_tr">
           <property name="geometry">
            <rect>
-            <x>150</x>
+            <x>110</x>
             <y>100</y>
             <width>161</width>
             <height>22</height>
@@ -1495,7 +1525,7 @@
        <widget class="QLabel" name="label_erroresTotales">
         <property name="geometry">
          <rect>
-          <x>80</x>
+          <x>90</x>
           <y>220</y>
           <width>16</width>
           <height>18</height>
@@ -1534,7 +1564,7 @@
        <widget class="QLabel" name="label_36">
         <property name="geometry">
          <rect>
-          <x>60</x>
+          <x>70</x>
           <y>220</y>
           <width>16</width>
           <height>18</height>
@@ -1628,13 +1658,138 @@
         </property>
        </widget>
       </widget>
-     </widget>
-    </item>
-    <item row="3" column="2">
-     <widget class="QSpinBox" name="spinBoxUUII">
-      <property name="value">
-       <number>8</number>
-      </property>
+      <widget class="QWidget" name="tab_11">
+       <attribute name="title">
+        <string>Importar/Exportar</string>
+       </attribute>
+       <widget class="QLineEdit" name="archivo_gpkg">
+        <property name="geometry">
+         <rect>
+          <x>12</x>
+          <y>40</y>
+          <width>241</width>
+          <height>32</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="busca_archivos">
+        <property name="geometry">
+         <rect>
+          <x>260</x>
+          <y>40</y>
+          <width>88</width>
+          <height>34</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Buscar...</string>
+        </property>
+       </widget>
+       <widget class="QLabel" name="label_22">
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>20</y>
+          <width>131</width>
+          <height>18</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Exportar</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="exportar">
+        <property name="geometry">
+         <rect>
+          <x>350</x>
+          <y>40</y>
+          <width>88</width>
+          <height>34</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Exportar</string>
+        </property>
+       </widget>
+       <widget class="QLabel" name="label_23">
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>100</y>
+          <width>131</width>
+          <height>18</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Importar</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="importar">
+        <property name="geometry">
+         <rect>
+          <x>330</x>
+          <y>120</y>
+          <width>88</width>
+          <height>34</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Importar</string>
+        </property>
+       </widget>
+       <widget class="Line" name="line_3">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>80</y>
+          <width>481</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+       </widget>
+       <widget class="QgsFileWidget" name="archivo_importar">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>120</y>
+          <width>311</width>
+          <height>41</height>
+         </rect>
+        </property>
+        <property name="filter">
+         <string/>
+        </property>
+       </widget>
+       <widget class="QRadioButton" name="radioButton_sobreescribir">
+        <property name="geometry">
+         <rect>
+          <x>80</x>
+          <y>100</y>
+          <width>111</width>
+          <height>22</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Sobreescribir</string>
+        </property>
+       </widget>
+       <widget class="QRadioButton" name="radioButton_annadir">
+        <property name="geometry">
+         <rect>
+          <x>200</x>
+          <y>100</y>
+          <width>105</width>
+          <height>22</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Añadir</string>
+        </property>
+       </widget>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -1712,7 +1867,6 @@
   <tabstop>pushButton_RevLin</tabstop>
   <tabstop>spinBoxFibRes</tabstop>
   <tabstop>checkBox_sinDer</tabstop>
-  <tabstop>checkBox_sinCE</tabstop>
   <tabstop>checkBox_nombrado</tabstop>
   <tabstop>checkBox_conteo</tabstop>
   <tabstop>checkBox_cartaEm</tabstop>
@@ -1720,7 +1874,6 @@
   <tabstop>pushButton_rd</tabstop>
   <tabstop>spinBoxFibRes_tr</tabstop>
   <tabstop>checkBox_sinDer_tr</tabstop>
-  <tabstop>checkBox_sinCE_tr</tabstop>
   <tabstop>checkBox_nomb_tr</tabstop>
   <tabstop>checkBox_conteo_tr</tabstop>
   <tabstop>checkBox_cartaEm_tr</tabstop>
