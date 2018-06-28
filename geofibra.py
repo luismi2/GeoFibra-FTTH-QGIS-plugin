@@ -2609,7 +2609,7 @@ class GeoFibra:
         try:        
             dicTablas = {'cajas_empalme_distribucion': 1,'cajas_empalme_troncal': 1,'carta_empalmes_distribucion': 0,'carta_empalmes_troncal': 0,'cpd': 1,'cpd_gpon': 0,'cto': 1,'cto_cables': 0,'dist_cto': 1,'distribucion': 1,'etiquetado_fibras_distribucion': 1,'etiquetado_fibras_troncal': 1,'etiquetado_peanas': 1,'fcl_distribucion': 0,'fcl_distribucion_acumulado': 0,'fcl_troncal' : 0,'fcl_troncal_acumulado': 0,'modelos_cable': 0,'peana_fibra_raiz' : 0,'peanas' : 1,'peanas_cables': 0,'splitters_peanas': 0,'troncal': 1,'troncal_peana': 1, 'layer_styles':0 }
             n_it= len(dicTablas)
-            command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:'dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""'"""
+            command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""""""
             for i,esp in dicTablas.items():                                    
                 cur.execute("""select column_name from information_schema.columns where table_schema = 'public' and table_name='"""+i+"""'""")
                 col = cur.fetchall()
