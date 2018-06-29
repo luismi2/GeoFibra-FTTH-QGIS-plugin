@@ -1688,10 +1688,15 @@ class GeoFibra:
             iface.messageBar().pushMessage(u"Atención:",'Selecciona una ruta de archivo.', QgsMessageBar.WARNING, 10)
         else:
             credenciales(nombreConexion)
-            fichero_temp= home+"/.qgis2/python/plugins/GeoFibra/temp/cat_15.txt" 
-            
+            rutaFichero = home+"/.qgis2/python/plugins/GeoFibra/temp/"
+            fichero_temp= "cat_15.txt"
+            ruta_completa =  rutaFichero+fichero_temp
+            if os.path.exists(rutaFichero):
+                pass
+            else:
+                os.mkdir( rutaFichero, 0755 );
             with io.open(rutaArchivoCAT, 'r', encoding='cp1252') as f:
-                with open(fichero_temp, "w") as f2:               
+                with open(ruta_completa, "w") as f2:               
                     for line in f:
                             if line[0:2] == '15':
                                 linea = line[0:2]+'|'+line[2:23]+'|'+ line[23:25]+'|'+ line[25:28]+'|'+  line[28:30]+'|'+   line[30:44]+ '|'+ line[44:48]+ '|'+ line[48:49] +'|'+ line[49:50]+'|'+ line[50:58] +'|'+  line[58:73] +'|'+  line[73:92] + '|'+  line[92:94]+'|'+   line[94:119] + '|'+  line[119:122] +'|'+  line[122:125] +'|'+  line[125:165]+'|'+  line[165:195] +'|'+  line[195:200] +'|'+  line[200:205] +'|'+   line[205:230]+'|'+   line[230:234]+'|'+  line[234:235]+'|'+  line[235:239] + '|'+ line[239:240] +'|'+  line[240:245] +'|'+  line[245:249]+'|'+ line[249:251] +'|'+  line[251:254] +'|'+   line[254:257]+'|'+  line[257:282] + '|'+  line[282:287] + '|'+  line[287:289]+'|'+   line[289:292]+'|'+  line[292:294] +'|'+  line[294:297] +'|'+  line[297:302] +'|'+  line[302:307] + '|'+  line[307:337]+'|'+  line[337:367] +'|'+   line[367:371]+'|'+  line[371:375]+ '|'+ line[375:427]+ '|'+ line[427:428]+'|'+  line[428:441] + '|'+ line[441:451] + '|'+line[451:461] + '|'+  line[461:470] + '|'+  line[470:1000]                    
@@ -1701,7 +1706,7 @@ class GeoFibra:
             sqlEncoding = """SET client_encoding to 'UTF8';"""
             ejecutaSQL(nombreBBDD, host, usuario, password, sqlCreate)
             ejecutaSQL(nombreBBDD, host, usuario, password, sqlEncoding)            
-            ejecutaSQL(nombreBBDD, host, usuario, password,""" COPY tipo15 ( tipo_reg , blank_1 ,cod_del_meh ,  cod_mun , clas_bi ,  ref_cat_parc ,  n_sec_bi , "1CC" ,  "2CC" ,  n_f_bi_gercat,  id_bi_ayto,  n_freg,  cod_provine,   nom_prov,   dgc,  codine,   nom_mun ,   ent_menor,  cod_via,   tipo_via,  nom_via,  "1NOM_POL",  "1LETRA_DUPL",  "2NUMPOL",  "2LETRA_DUPL"  ,  km ,  bloque ,  escalera,  planta ,  puerta ,  txtdir ,   cod_post ,  distmun ,   dgc_2 ,  cod_zona_conc ,   cod_pol,  cod_parc ,   cod_paraje  ,  nombre_paraje  ,  blank_2,  n_orden_inm ,  ann_ant ,  blank_3 ,  uso  ,  blank  ,  sup_el ,  sup_inm  ,  coef_prop ,  blank_4 ) FROM '"""+fichero_temp+"""' ( delimiter '|' );""")
+            ejecutaSQL(nombreBBDD, host, usuario, password,""" COPY tipo15 ( tipo_reg , blank_1 ,cod_del_meh ,  cod_mun , clas_bi ,  ref_cat_parc ,  n_sec_bi , "1CC" ,  "2CC" ,  n_f_bi_gercat,  id_bi_ayto,  n_freg,  cod_provine,   nom_prov,   dgc,  codine,   nom_mun ,   ent_menor,  cod_via,   tipo_via,  nom_via,  "1NOM_POL",  "1LETRA_DUPL",  "2NUMPOL",  "2LETRA_DUPL"  ,  km ,  bloque ,  escalera,  planta ,  puerta ,  txtdir ,   cod_post ,  distmun ,   dgc_2 ,  cod_zona_conc ,   cod_pol,  cod_parc ,   cod_paraje  ,  nombre_paraje  ,  blank_2,  n_orden_inm ,  ann_ant ,  blank_3 ,  uso  ,  blank  ,  sup_el ,  sup_inm  ,  coef_prop ,  blank_4 ) FROM '"""+ruta_completa+"""' ( delimiter '|' );""")
             
             capasNSP('CATASTRO',host, nombreBBDD,usuario, password, 'tipo15', 'Tipo 15')
             mensaje = u'La importación ha tenido éxito'
