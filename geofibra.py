@@ -2641,7 +2641,7 @@ class GeoFibra:
             n_it= len(dicTablas)
             command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+""" " """
             for i,esp in dicTablas.items():
-            	print i                                     
+            	                                     
                 cur.execute("""select column_name from information_schema.columns where table_schema = 'public' and table_name='"""+i+"""'""")
                 col = cur.fetchall()
                 j = j + 1
