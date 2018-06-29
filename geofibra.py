@@ -1707,7 +1707,7 @@ class GeoFibra:
             ejecutaSQL(nombreBBDD, host, usuario, password, sqlCreate)
             ejecutaSQL(nombreBBDD, host, usuario, password, sqlEncoding)            
             ejecutaSQL(nombreBBDD, host, usuario, password,""" COPY tipo15 ( tipo_reg , blank_1 ,cod_del_meh ,  cod_mun , clas_bi ,  ref_cat_parc ,  n_sec_bi , "1CC" ,  "2CC" ,  n_f_bi_gercat,  id_bi_ayto,  n_freg,  cod_provine,   nom_prov,   dgc,  codine,   nom_mun ,   ent_menor,  cod_via,   tipo_via,  nom_via,  "1NOM_POL",  "1LETRA_DUPL",  "2NUMPOL",  "2LETRA_DUPL"  ,  km ,  bloque ,  escalera,  planta ,  puerta ,  txtdir ,   cod_post ,  distmun ,   dgc_2 ,  cod_zona_conc ,   cod_pol,  cod_parc ,   cod_paraje  ,  nombre_paraje  ,  blank_2,  n_orden_inm ,  ann_ant ,  blank_3 ,  uso  ,  blank  ,  sup_el ,  sup_inm  ,  coef_prop ,  blank_4 ) FROM '"""+ruta_completa+"""' ( delimiter '|' );""")
-            
+            os.remove(ruta_completa)
             capasNSP('CATASTRO',host, nombreBBDD,usuario, password, 'tipo15', 'Tipo 15')
             mensaje = u'La importación ha tenido éxito'
             QMessageBox.information(None, "INFO", mensaje)
