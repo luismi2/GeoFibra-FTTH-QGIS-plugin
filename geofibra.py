@@ -53,6 +53,7 @@ import db_manager.db_plugins.postgis.connector as con
 from qgis.core import QgsDataSourceURI
 from qgis import utils
 import time
+import inspect
 
 #Variables Globales
 home = expanduser("~")
@@ -64,7 +65,9 @@ password= ''
 canvas = iface.mapCanvas()
 nombreRed = ''
 nombreCapaCableado = ''
-
+rutaPlugin = inspect.stack()[0][1]
+rutaS = rutaPlugin.split('/')[:-1]
+rutaC = '/'.join(rutaS)
 
 #Mis funciones
 #Funcion Actualiza Conexiones
@@ -123,6 +126,24 @@ def capas(nombreGrupo,host, nomBBDD,usuario, passw, nombreTabla, nombreTOC, ruta
     vlayer.triggerRepaint()
     extent = vlayer.extent()
     canvas.setExtent(extent)
+    canvas.refresh()
+
+def capasSP(nombreGrupo,host, nomBBDD,usuario, passw, nombreTabla, nombreTOC):
+    root = QgsProject.instance().layerTreeRoot()
+    canvas = qgis.utils.iface.mapCanvas()
+    grupoTroncal = root.findGroup(nombreGrupo )
+    sql=''
+    uri = QgsDataSourceURI()
+    uri.setConnection(host, '5432', nomBBDD, usuario, passw)
+    uri.setDataSource("public",nombreTabla, "geom",sql)
+    vlayer = QgsVectorLayer(uri.uri(), nombreTOC, "postgres")
+    if not vlayer.isValid():
+        print "not valid"
+    for lyr in QgsMapLayerRegistry.instance().mapLayers().values():
+        if lyr.name() == nombreTOC:
+            QgsMapLayerRegistry.instance().removeMapLayer(lyr.id())
+    QgsMapLayerRegistry.instance().addMapLayer(vlayer, False)
+    grupoTroncal.addLayer(vlayer)
     canvas.refresh()
 
 #Funcion que  carga capas No espaciales. Tablas simples.
@@ -223,7 +244,7 @@ def creSplittersDist( campoNombre,campoSplitters, campoRatioSpliteo, nombreTabla
         for counter1 in range (1,int(feature.attributes()[idSp]+1.0)):
             for counter in range (1,int(feature.attributes()[idRatSp]+1.0)):
                 sql= """insert into splitters(nombre_cto, n_splitter,pat_splitter) values ('%s','%s','%s');"""% (feature.attributes()[idx],str(counter1),str(counter))           
-                
+                 
                 ejecutaSQL(nombreBBDD,host, usuario,password,sql)
 
 #Funcion que nombra los cables primarios
@@ -557,9 +578,9 @@ def carta_empalmes(nombreBBDD, host, usuario,password,nombreCapaTOC, cableado, n
                                          FROM (
                                     with 
                                         puntos_derivadores as (
-                                            select id, geom from """+cajasSplitters+""" where """+campoDerivador+"""='S'
+                                            select id::bigint, geom from """+cajasSplitters+""" where """+campoDerivador+"""='S'
                                             union all
-                                            select id, geom from  cajas_empalme_"""+cableado+"""
+                                            select id::bigint, geom from  cajas_empalme_"""+cableado+"""
                                         ),
                                         cables_principales as (
                                         
@@ -1215,8 +1236,17 @@ def actualizaNombre(baseDatosNombre, host,  usuario,password):
     ejecutaSQL(baseDatosNombre, host, usuario,password, sqlAct)
 
 
-
-
+def recreaCapas(diccionario, nombreGrupo):
+    for the_key, the_value in diccionario.iteritems():    
+        if QgsMapLayerRegistry.instance().mapLayersByName(the_key):
+            pass
+        else:
+            
+            if nombreGrupo == 'VARIOS':
+                capasNSP(nombreGrupo,host, nombreBBDD,usuario, password, the_value, the_key)
+            else:                
+                rutaEstilo=rutaC+'/plugins/Geofibra/estilos/'+the_value+'.qml'                
+                capas(nombreGrupo,host, nombreBBDD,usuario, password,the_value , the_key, rutaEstilo)
      
 
 
@@ -2431,7 +2461,7 @@ class GeoFibra:
                                         where 
                                             concat(origen"""+posicionM+""".nombre,', T',origen"""+posicionM+""".tubo_numero,', F',origen"""+posicionM+""".fibra)=cd.destino )"""
                     
-                   
+                  
                     sqlCompo = sqlCore+saco+sqlFinal
                     
                     ejecutaSQL(nombreBBDD, host, usuario,password, sqlUpdate%sqlCompo)
@@ -2607,9 +2637,9 @@ class GeoFibra:
         progressMessageBar.pushWidget(progress)
         j = 0
         try:        
-            dicTablas = {'cajas_empalme_distribucion': 1,'cajas_empalme_troncal': 1,'carta_empalmes_distribucion': 0,'carta_empalmes_troncal': 0,'cpd': 1,'cpd_gpon': 0,'cto': 1,'cto_cables': 0,'dist_cto': 1,'distribucion': 1,'etiquetado_fibras_distribucion': 1,'etiquetado_fibras_troncal': 1,'etiquetado_peanas': 1,'fcl_distribucion': 0,'fcl_distribucion_acumulado': 0,'fcl_troncal' : 0,'fcl_troncal_acumulado': 0,'modelos_cable': 0,'peana_fibra_raiz' : 0,'peanas' : 1,'peanas_cables': 0,'splitters_peanas': 0,'troncal': 1,'troncal_peana': 1, 'layer_styles':0 }
+            dicTablas = {'cajas_empalme_distribucion': 1,'cajas_empalme_troncal': 1,'carta_empalmes_distribucion': 0,'carta_empalmes_troncal': 0,'cpd': 1,'cpd_gpon': 0,'cto': 1,'cto_cables': 0,'dist_cto': 1,'distribucion': 1,'etiquetado_fibras_distribucion': 1,'etiquetado_fibras_troncal': 1,'etiquetado_peanas': 1,'fcl_distribucion': 0,'fcl_distribucion_acumulado': 0,'fcl_troncal' : 0,'fcl_troncal_acumulado': 0,'modelos_cable': 0,'peana_fibra_raiz' : 0,'peanas' : 1,'peanas_cables': 0,'splitters_peanas': 0,'troncal': 1,'troncal_peana': 1, 'layer_styles':0,'splitters':0 }
             n_it= len(dicTablas)
-            command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+""" " """"
+            command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+""" " """
             for i,esp in dicTablas.items():                                    
                 cur.execute("""select column_name from information_schema.columns where table_schema = 'public' and table_name='"""+i+"""'""")
                 col = cur.fetchall()
@@ -2638,7 +2668,7 @@ class GeoFibra:
                     command=command+' -sql "'+parte1+parte2+'" '+'-nln '+i             
                 
                 os.system(command)
-                command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+"""""""
+                command = u"""ogr2ogr -overwrite -lco FID=id -f GPKG """ +nombreArchivo+ """ PG:"dbname="""+nombreBBDD+""" host="""+host+""" user="""+usuario+""" password="""+password+""" " """
             
             mensaje = u'Exportación finalizada.'
             QMessageBox.information(None, "INFO", mensaje)
@@ -2652,27 +2682,37 @@ class GeoFibra:
     def importa_dpkg(self, nombreConexion): 
         credenciales(str(nombreConexion))
         nombreArchivo = self.dockwidget.archivo_importar.filePath()
-        command = """ogr2ogr %s  -t_srs epsg:25830 -f "PostgreSQL" PG:"dbname='""" + nombreBBDD + \
+        dicDistribucion = {'Dist-Cajas Empalme':'cajas_empalme_distribucion','Dist-Cableado':'distribucion','CTO':'cto',}
+        dicTroncal = {'Tr-Cajas Empalme':'cajas_empalme_troncal','CPD':'cpd','Tr-Cableado':'troncal','SP 1er Nivel':'peanas'}
+        dicVarios = {'Dist-Carta de empalmes':'carta_empalmes_distribucion','Tr-Carta de empalmes':'carta_empalmes_troncal','Splitters':'splitters','Tarjetas GPON':'cpd_gpon','Tr-Fusiones Splitters Troncal':'splitters_peanas'}
+        command = """ogr2ogr %s  -t_srs epsg:25830  -f "PostgreSQL" PG:"dbname='""" + nombreBBDD + \
                 """' host='""" + host + \
                 """' user='""" + usuario + \
                 """' password='""" + password + \
                 """' port='5432' " """ + \
-                ''' "'''+ nombreArchivo+'''" -skipfailures'''       
+                ''' "'''+ nombreArchivo+'''" -skipfailures '''       
         if self.dockwidget.radioButton_sobreescribir.isChecked():            
             mensaje = u'Si continúas sobreescribirás toda la BBDD.'        
             reply = QMessageBox.question(self.iface.mainWindow(), u'¿Continuar?',mensaje, QMessageBox.Yes, QMessageBox.No)
             
             if reply == QtGui.QMessageBox.Yes:
-                command = command%('-overwrite -lco GEOMETRY_NAME=geom')                
+                command = command%('-overwrite -lco FID=id -lco GEOMETRY_NAME=geom ')                
                 os.system(command)
                 mensaje = u'Importación finalizada.'                
             else:
                 return 
                       
         elif self.dockwidget.radioButton_annadir.isChecked():
-            command = command%(' -append -unsetFid ')             
-            os.system(command)        
+            command = command%(' -append -lco FID=id -lco GEOMETRY_NAME=geom -unsetFid ')
+                       
+            os.system(command)
+        recreaCapas(dicDistribucion,'DISTRIBUCION')
+        recreaCapas(dicTroncal,'TRONCAL') 
+        recreaCapas(dicVarios,'VARIOS')
+        
         mensaje = u'Importación finalizada.'
+        
+
         QMessageBox.information(None, "INFO", mensaje) 
         
     def cto_plus(self,ratioSp, spCTO, caja_ext, caja_int,nombreConexion,acron_pob):
