@@ -1034,7 +1034,7 @@ def errores_topologia(self, abrevRed,cajasSplitters, cableado, peanas_cpd_origen
 
 #Funcion para obtener las longitudes de cable entre Cajas.
 def cortaCables(nombreCapaS,nombreTablaCables,nombreTablaCajas, nombreTOC):
-    sqlDrop="""DROP TABLE IF EXISTS """ +nombreCapaS
+    sqlDrop="""DROP TABLE IF EXISTS """ +nombreCapaS+""";"""
     sqlCortaCables = """
     Create table """ +nombreCapaS+""" AS
         select
@@ -1055,7 +1055,7 @@ def cortaCables(nombreCapaS,nombreTablaCables,nombreTablaCajas, nombreTOC):
             ) splitcbl;
     ALTER TABLE """ +nombreCapaS+""" ADD PRIMARY KEY (id);
     ALTER TABLE """ +nombreCapaS+""" ALTER COLUMN geom type geometry(Linestring, 25830); """
-
+    ejecutaSQL(nombreBBDD,host,usuario,password,sqlDrop)
     ejecutaSQL(nombreBBDD,host,usuario,password,sqlCortaCables)
     qmlDistancias = home+"""/.qgis2/python/plugins/GeoFibra/estilos/distancia_cbl_cajas.qml"""
     capas(nombreTablaCables.upper(),host,nombreBBDD, usuario, password, nombreCapaS, nombreTOC, qmlDistancias)
