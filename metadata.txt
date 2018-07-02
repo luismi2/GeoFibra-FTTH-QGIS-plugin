@@ -10,7 +10,7 @@
 name=GeoFibra
 qgisMinimumVersion=2.18
 description=Asistente de Diseño de Redes FTTH.
-version=1.0
+version=1.1
 author=Luis Miguel Royo Perez
 email=admin@inisig.com; luis.miguel.royo@gmail.com
 
